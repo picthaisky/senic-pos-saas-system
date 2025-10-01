@@ -1,0 +1,6 @@
+@SenicPosSaaS.API_HostAddress = http://localhost:5247
+
+GET {{SenicPosSaaS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
