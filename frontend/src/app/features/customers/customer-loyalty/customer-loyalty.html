@@ -1,0 +1,224 @@
+<div class="customer-loyalty-container p-4 bg-gray-50 dark:bg-gray-900 min-h-screen">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    
+    <!-- Left Panel - Customer Form and List -->
+    <div class="lg:col-span-2">
+      <mat-card class="mb-4">
+        <mat-card-header>
+          <mat-card-title>Add New Customer</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <form [formGroup]="customerForm" (ngSubmit)="onSubmit()" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>Name</mat-label>
+              <input matInput formControlName="name" placeholder="Customer name" />
+              <mat-icon matPrefix>person</mat-icon>
+              @if (customerForm.get('name')?.hasError('required') && customerForm.get('name')?.touched) {
+                <mat-error>Name is required</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>Email</mat-label>
+              <input matInput type="email" formControlName="email" placeholder="email@example.com" />
+              <mat-icon matPrefix>email</mat-icon>
+              @if (customerForm.get('email')?.hasError('email') && customerForm.get('email')?.touched) {
+                <mat-error>Invalid email</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>Phone</mat-label>
+              <input matInput formControlName="phone" placeholder="0812345678" />
+              <mat-icon matPrefix>phone</mat-icon>
+              @if (customerForm.get('phone')?.hasError('pattern') && customerForm.get('phone')?.touched) {
+                <mat-error>Invalid phone number</mat-error>
+              }
+            </mat-form-field>
+
+            <div class="md:col-span-3">
+              <button mat-raised-button color="primary" type="submit" [disabled]="customerForm.invalid || loading()">
+                <mat-icon>add</mat-icon>
+                Add Customer
+              </button>
+            </div>
+          </form>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-header>
+          <mat-card-title>Customer List</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="overflow-x-auto">
+            <table mat-table [dataSource]="dataSource" class="w-full">
+              
+              <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef> Name </th>
+                <td mat-cell *matCellDef="let customer"> 
+                  <div class="font-semibold">{{ customer.name }}</div>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="email">
+                <th mat-header-cell *matHeaderCellDef> Email </th>
+                <td mat-cell *matCellDef="let customer"> {{ customer.email || '-' }} </td>
+              </ng-container>
+
+              <ng-container matColumnDef="phone">
+                <th mat-header-cell *matHeaderCellDef> Phone </th>
+                <td mat-cell *matCellDef="let customer"> {{ customer.phone || '-' }} </td>
+              </ng-container>
+
+              <ng-container matColumnDef="loyaltyPoints">
+                <th mat-header-cell *matHeaderCellDef> Points </th>
+                <td mat-cell *matCellDef="let customer">
+                  <mat-chip color="primary" class="font-bold">
+                    <mat-icon>stars</mat-icon>
+                    {{ customer.loyaltyPoints }}
+                  </mat-chip>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="totalSpent">
+                <th mat-header-cell *matHeaderCellDef> Total Spent </th>
+                <td mat-cell *matCellDef="let customer">
+                  <span class="text-green-600 font-bold">฿{{ customer.totalSpent.toFixed(2) }}</span>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="visitCount">
+                <th mat-header-cell *matHeaderCellDef> Visits </th>
+                <td mat-cell *matCellDef="let customer"> {{ customer.visitCount }} </td>
+              </ng-container>
+
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef> Actions </th>
+                <td mat-cell *matCellDef="let customer">
+                  <button mat-icon-button (click)="viewCustomer(customer)" matTooltip="View Details">
+                    <mat-icon>visibility</mat-icon>
+                  </button>
+                  <button mat-icon-button color="warn" (click)="deleteCustomer(customer)" matTooltip="Delete">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+              <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+            </table>
+          </div>
+
+          @if (loading()) {
+            <div class="flex justify-center p-8">
+              <mat-spinner></mat-spinner>
+            </div>
+          }
+
+          @if (!loading() && customers().length === 0) {
+            <div class="text-center py-12 text-gray-400">
+              <mat-icon class="text-6xl mb-4">people</mat-icon>
+              <p class="text-lg">No customers yet</p>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Right Panel - Customer Details -->
+    <div class="lg:col-span-1">
+      @if (selectedCustomer()) {
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>{{ selectedCustomer()!.name }}</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="space-y-4">
+              <!-- Customer Info -->
+              <div class="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg text-center">
+                <mat-icon class="text-6xl text-blue-600 mb-2">account_circle</mat-icon>
+                <h3 class="text-2xl font-bold mb-2">{{ selectedCustomer()!.name }}</h3>
+                @if (selectedCustomer()!.email) {
+                  <p class="text-sm text-gray-600 dark:text-gray-300">{{ selectedCustomer()!.email }}</p>
+                }
+                @if (selectedCustomer()!.phone) {
+                  <p class="text-sm text-gray-600 dark:text-gray-300">{{ selectedCustomer()!.phone }}</p>
+                }
+              </div>
+
+              <!-- Loyalty Points -->
+              <div class="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900 dark:to-pink-900 p-4 rounded-lg text-center">
+                <mat-icon class="text-5xl text-purple-600 mb-2">stars</mat-icon>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-1">Loyalty Points</p>
+                <h2 class="text-4xl font-bold text-purple-600">{{ selectedCustomer()!.loyaltyPoints }}</h2>
+              </div>
+
+              <!-- Stats -->
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-green-50 dark:bg-green-900 p-4 rounded-lg text-center">
+                  <mat-icon class="text-3xl text-green-600 mb-2">attach_money</mat-icon>
+                  <p class="text-xs text-gray-600 dark:text-gray-300 mb-1">Total Spent</p>
+                  <p class="text-xl font-bold text-green-600">฿{{ selectedCustomer()!.totalSpent.toFixed(2) }}</p>
+                </div>
+                <div class="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg text-center">
+                  <mat-icon class="text-3xl text-blue-600 mb-2">shopping_bag</mat-icon>
+                  <p class="text-xs text-gray-600 dark:text-gray-300 mb-1">Visits</p>
+                  <p class="text-xl font-bold text-blue-600">{{ selectedCustomer()!.visitCount }}</p>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="space-y-2">
+                <button mat-raised-button color="primary" class="w-full" (click)="addPoints()">
+                  <mat-icon>add</mat-icon>
+                  Add Points
+                </button>
+                <button mat-stroked-button color="accent" class="w-full" (click)="redeemPoints()">
+                  <mat-icon>redeem</mat-icon>
+                  Redeem Points
+                </button>
+              </div>
+
+              <!-- Transaction History -->
+              <mat-expansion-panel>
+                <mat-expansion-panel-header>
+                  <mat-panel-title>
+                    <mat-icon class="mr-2">history</mat-icon>
+                    Transaction History
+                  </mat-panel-title>
+                </mat-expansion-panel-header>
+                <div class="space-y-2">
+                  @for (tx of transactions(); track tx.id) {
+                    <div class="border-b pb-2">
+                      <div class="flex justify-between items-center">
+                        <span [class.text-green-600]="tx.type === 'EARNED'" 
+                              [class.text-red-600]="tx.type === 'REDEEMED'"
+                              class="font-bold">
+                          {{ tx.type === 'EARNED' ? '+' : '-' }}{{ tx.points }} pts
+                        </span>
+                        <span class="text-xs text-gray-500">
+                          {{ tx.createdAt | date: 'short' }}
+                        </span>
+                      </div>
+                      <p class="text-sm text-gray-600 dark:text-gray-400">{{ tx.description }}</p>
+                    </div>
+                  } @empty {
+                    <p class="text-center text-gray-400 py-4">No transactions</p>
+                  }
+                </div>
+              </mat-expansion-panel>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      } @else {
+        <mat-card>
+          <mat-card-content class="text-center py-12">
+            <mat-icon class="text-6xl text-gray-400 mb-4">person_search</mat-icon>
+            <p class="text-gray-400">Select a customer to view details</p>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  </div>
+</div>

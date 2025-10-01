@@ -1,0 +1,80 @@
+<div class="login-container min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+  <mat-card class="login-card max-w-md w-full">
+    <mat-card-header class="flex flex-col items-center mb-6">
+      <mat-card-title class="text-3xl font-bold text-center mb-2">
+        Senic POS SaaS
+      </mat-card-title>
+      <mat-card-subtitle class="text-center">
+        Sign in to your account
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (error()) {
+        <div class="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded mb-4" role="alert">
+          <span class="block sm:inline">{{ error() }}</span>
+        </div>
+      }
+
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-4">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Tenant ID</mat-label>
+          <input matInput formControlName="tenantId" placeholder="Enter your tenant ID" />
+          <mat-icon matPrefix>business</mat-icon>
+          @if (loginForm.get('tenantId')?.hasError('required') && loginForm.get('tenantId')?.touched) {
+            <mat-error>Tenant ID is required</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Email</mat-label>
+          <input matInput type="email" formControlName="email" placeholder="Enter your email" />
+          <mat-icon matPrefix>email</mat-icon>
+          @if (loginForm.get('email')?.hasError('required') && loginForm.get('email')?.touched) {
+            <mat-error>Email is required</mat-error>
+          }
+          @if (loginForm.get('email')?.hasError('email') && loginForm.get('email')?.touched) {
+            <mat-error>Invalid email format</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Password</mat-label>
+          <input matInput 
+                 [type]="hidePassword() ? 'password' : 'text'" 
+                 formControlName="password" 
+                 placeholder="Enter your password" />
+          <mat-icon matPrefix>lock</mat-icon>
+          <button mat-icon-button matSuffix type="button" (click)="togglePasswordVisibility()">
+            <mat-icon>{{ hidePassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          @if (loginForm.get('password')?.hasError('required') && loginForm.get('password')?.touched) {
+            <mat-error>Password is required</mat-error>
+          }
+          @if (loginForm.get('password')?.hasError('minlength') && loginForm.get('password')?.touched) {
+            <mat-error>Password must be at least 6 characters</mat-error>
+          }
+        </mat-form-field>
+
+        <button 
+          mat-raised-button 
+          color="primary" 
+          type="submit" 
+          class="w-full h-12 text-lg"
+          [disabled]="loading() || loginForm.invalid">
+          @if (loading()) {
+            <mat-spinner diameter="20" class="inline-block mr-2"></mat-spinner>
+            <span>Signing in...</span>
+          } @else {
+            <span>Sign In</span>
+          }
+        </button>
+      </form>
+    </mat-card-content>
+
+    <mat-card-footer class="text-center text-sm text-gray-600 dark:text-gray-400 mt-4">
+      <p>Multi-Tenant POS SaaS System</p>
+      <p class="mt-1">Powered by Angular 20 + Material</p>
+    </mat-card-footer>
+  </mat-card>
+</div>
