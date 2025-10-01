@@ -1,0 +1,89 @@
+<mat-sidenav-container class="h-screen">
+  <!-- Sidebar -->
+  <mat-sidenav 
+    [opened]="sidenavOpened()" 
+    [mode]="'side'"
+    class="w-64 border-r dark:border-gray-700">
+    
+    <!-- Logo & Brand -->
+    <div class="p-4 flex items-center space-x-3 border-b dark:border-gray-700">
+      <mat-icon class="text-primary text-3xl">storefront</mat-icon>
+      <div>
+        <h2 class="text-xl font-bold">Senic POS</h2>
+        <p class="text-xs text-gray-500">Multi-Tenant SaaS</p>
+      </div>
+    </div>
+
+    <!-- Navigation Menu -->
+    <mat-nav-list class="pt-2">
+      @for (item of filteredNavItems(); track item.route) {
+        <a mat-list-item [routerLink]="item.route" routerLinkActive="active-link" class="mb-1">
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+
+    <!-- User Info (Bottom of Sidebar) -->
+    <div class="absolute bottom-0 left-0 right-0 p-4 border-t dark:border-gray-700">
+      @if (authService.currentUser()) {
+        <div class="flex items-center space-x-3">
+          <div class="bg-primary text-white rounded-full w-10 h-10 flex items-center justify-center font-bold">
+            {{ authService.currentUser()!.name.charAt(0).toUpperCase() }}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold truncate">{{ authService.currentUser()!.name }}</p>
+            <p class="text-xs text-gray-500 truncate">{{ authService.currentUser()!.role }}</p>
+          </div>
+        </div>
+      }
+    </div>
+  </mat-sidenav>
+
+  <!-- Main Content -->
+  <mat-sidenav-content>
+    <!-- Toolbar -->
+    <mat-toolbar class="border-b dark:border-gray-700 shadow-sm">
+      <button mat-icon-button (click)="toggleSidenav()">
+        <mat-icon>menu</mat-icon>
+      </button>
+
+      <span class="flex-1"></span>
+
+      <!-- Theme Toggle -->
+      <button mat-icon-button (click)="toggleTheme()" [matTooltip]="'Toggle ' + (themeService.theme() === 'light' ? 'dark' : 'light') + ' mode'">
+        <mat-icon>{{ themeService.theme() === 'light' ? 'dark_mode' : 'light_mode' }}</mat-icon>
+      </button>
+
+      <!-- Notifications -->
+      <button mat-icon-button matTooltip="Notifications">
+        <mat-icon matBadge="3" matBadgeColor="warn">notifications</mat-icon>
+      </button>
+
+      <!-- User Menu -->
+      <button mat-icon-button [matMenuTriggerFor]="userMenu">
+        <mat-icon>account_circle</mat-icon>
+      </button>
+      <mat-menu #userMenu="matMenu">
+        <button mat-menu-item>
+          <mat-icon>person</mat-icon>
+          <span>Profile</span>
+        </button>
+        <button mat-menu-item>
+          <mat-icon>settings</mat-icon>
+          <span>Settings</span>
+        </button>
+        <mat-divider></mat-divider>
+        <button mat-menu-item (click)="logout()">
+          <mat-icon color="warn">logout</mat-icon>
+          <span>Logout</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <!-- Router Outlet -->
+    <div class="content-area">
+      <router-outlet></router-outlet>
+    </div>
+  </mat-sidenav-content>
+</mat-sidenav-container>
