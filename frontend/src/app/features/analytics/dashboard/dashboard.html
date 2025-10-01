@@ -1,0 +1,195 @@
+<div class="dashboard-container p-4 bg-gray-50 dark:bg-gray-900 min-h-screen">
+  <!-- Header -->
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold">Analytics Dashboard</h1>
+    <button mat-raised-button color="primary" (click)="refreshData()">
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Total Sales -->
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Sales</p>
+            <h2 class="text-3xl font-bold text-green-600">฿{{ stats().totalSales.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</h2>
+            <p class="text-xs text-green-600 mt-1">
+              <mat-icon class="text-sm">trending_up</mat-icon>
+              +12.5% from last month
+            </p>
+          </div>
+          <div class="bg-green-100 dark:bg-green-900 p-4 rounded-full">
+            <mat-icon class="text-green-600 text-4xl">attach_money</mat-icon>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Total Orders -->
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Orders</p>
+            <h2 class="text-3xl font-bold text-blue-600">{{ stats().totalOrders }}</h2>
+            <p class="text-xs text-blue-600 mt-1">
+              <mat-icon class="text-sm">trending_up</mat-icon>
+              +8.3% from last month
+            </p>
+          </div>
+          <div class="bg-blue-100 dark:bg-blue-900 p-4 rounded-full">
+            <mat-icon class="text-blue-600 text-4xl">shopping_cart</mat-icon>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Total Customers -->
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Customers</p>
+            <h2 class="text-3xl font-bold text-purple-600">{{ stats().totalCustomers }}</h2>
+            <p class="text-xs text-purple-600 mt-1">
+              <mat-icon class="text-sm">trending_up</mat-icon>
+              +15.2% from last month
+            </p>
+          </div>
+          <div class="bg-purple-100 dark:bg-purple-900 p-4 rounded-full">
+            <mat-icon class="text-purple-600 text-4xl">people</mat-icon>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Low Stock Alert -->
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Low Stock Items</p>
+            <h2 class="text-3xl font-bold text-red-600">{{ stats().lowStockItems }}</h2>
+            <p class="text-xs text-red-600 mt-1">
+              <mat-icon class="text-sm">warning</mat-icon>
+              Requires attention
+            </p>
+          </div>
+          <div class="bg-red-100 dark:bg-red-900 p-4 rounded-full">
+            <mat-icon class="text-red-600 text-4xl">inventory_2</mat-icon>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- Sales Chart -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Sales Trend</mat-card-title>
+        <mat-card-subtitle>Monthly sales performance</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="space-y-4">
+          @for (data of salesData(); track data.date) {
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-semibold">{{ data.date }}</span>
+                <span class="text-sm font-bold text-green-600">฿{{ data.sales.toLocaleString() }}</span>
+              </div>
+              <mat-progress-bar 
+                mode="determinate" 
+                [value]="getSalesPercentage(data.sales)"
+                color="primary">
+              </mat-progress-bar>
+              <div class="text-xs text-gray-500 mt-1">{{ data.orders }} orders</div>
+            </div>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Top Products -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Top Products</mat-card-title>
+        <mat-card-subtitle>Best selling products</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <table mat-table [dataSource]="topProducts()" class="w-full">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef> Product </th>
+            <td mat-cell *matCellDef="let product"> 
+              <span class="font-semibold">{{ product.name }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef> Qty Sold </th>
+            <td mat-cell *matCellDef="let product"> 
+              <span class="text-blue-600 font-bold">{{ product.quantity }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="revenue">
+            <th mat-header-cell *matHeaderCellDef> Revenue </th>
+            <td mat-cell *matCellDef="let product"> 
+              <span class="text-green-600 font-bold">฿{{ product.revenue.toLocaleString() }}</span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Quick Actions -->
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Quick Actions</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <button mat-raised-button color="primary" class="h-20">
+          <div class="flex flex-col items-center">
+            <mat-icon class="mb-1">point_of_sale</mat-icon>
+            <span class="text-xs">New Sale</span>
+          </div>
+        </button>
+        <button mat-raised-button class="h-20">
+          <div class="flex flex-col items-center">
+            <mat-icon class="mb-1">inventory_2</mat-icon>
+            <span class="text-xs">Inventory</span>
+          </div>
+        </button>
+        <button mat-raised-button class="h-20">
+          <div class="flex flex-col items-center">
+            <mat-icon class="mb-1">people</mat-icon>
+            <span class="text-xs">Customers</span>
+          </div>
+        </button>
+        <button mat-raised-button class="h-20">
+          <div class="flex flex-col items-center">
+            <mat-icon class="mb-1">assessment</mat-icon>
+            <span class="text-xs">Reports</span>
+          </div>
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Loading Overlay -->
+  @if (loading()) {
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <mat-spinner></mat-spinner>
+    </div>
+  }
+</div>

@@ -1,0 +1,168 @@
+<div class="inventory-container p-4 bg-gray-50 dark:bg-gray-900 min-h-screen">
+  <mat-card>
+    <mat-card-header class="flex justify-between items-center mb-4">
+      <mat-card-title class="text-2xl font-bold">Inventory Management</mat-card-title>
+      <div class="space-x-2">
+        <button mat-raised-button color="primary" (click)="addNewItem()">
+          <mat-icon>add</mat-icon>
+          Add Item
+        </button>
+        <button mat-stroked-button (click)="exportData()">
+          <mat-icon>download</mat-icon>
+          Export
+        </button>
+      </div>
+    </mat-card-header>
+
+    <mat-card-content>
+      <!-- Filter Section -->
+      <div class="filters mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Search</mat-label>
+          <input matInput 
+                 [value]="searchTerm()" 
+                 (input)="onSearch($any($event.target).value)" 
+                 placeholder="Search by name or SKU" />
+          <mat-icon matPrefix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Category</mat-label>
+          <mat-select [value]="selectedCategory()" (selectionChange)="onCategoryChange($event.value)">
+            <mat-option [value]="null">All Categories</mat-option>
+            @for (category of categories; track category) {
+              <mat-option [value]="category">{{ category }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <button 
+          mat-stroked-button 
+          [class.mat-raised-button]="showLowStock()"
+          [color]="showLowStock() ? 'warn' : undefined"
+          (click)="toggleLowStock()"
+          class="h-14">
+          <mat-icon>warning</mat-icon>
+          Low Stock
+        </button>
+
+        <button mat-stroked-button (click)="loadInventory()" class="h-14">
+          <mat-icon>refresh</mat-icon>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="overflow-x-auto">
+        <table mat-table [dataSource]="dataSource" matSort (matSortChange)="onSort($event)" class="w-full">
+          
+          <!-- Name Column -->
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Name </th>
+            <td mat-cell *matCellDef="let item"> 
+              <div class="font-semibold">{{ item.name }}</div>
+            </td>
+          </ng-container>
+
+          <!-- SKU Column -->
+          <ng-container matColumnDef="sku">
+            <th mat-header-cell *matHeaderCellDef> SKU </th>
+            <td mat-cell *matCellDef="let item"> {{ item.sku }} </td>
+          </ng-container>
+
+          <!-- Barcode Column -->
+          <ng-container matColumnDef="barcode">
+            <th mat-header-cell *matHeaderCellDef> Barcode </th>
+            <td mat-cell *matCellDef="let item"> {{ item.barcode || '-' }} </td>
+          </ng-container>
+
+          <!-- Category Column -->
+          <ng-container matColumnDef="category">
+            <th mat-header-cell *matHeaderCellDef> Category </th>
+            <td mat-cell *matCellDef="let item">
+              <mat-chip class="text-xs">{{ item.category }}</mat-chip>
+            </td>
+          </ng-container>
+
+          <!-- Price Column -->
+          <ng-container matColumnDef="price">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Price </th>
+            <td mat-cell *matCellDef="let item"> 
+              <span class="font-bold text-green-600">฿{{ item.price.toFixed(2) }}</span>
+            </td>
+          </ng-container>
+
+          <!-- Quantity Column -->
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header> Quantity </th>
+            <td mat-cell *matCellDef="let item">
+              @if (isLowStock(item)) {
+                <span class="text-red-600 font-bold flex items-center">
+                  <mat-icon class="text-sm mr-1">warning</mat-icon>
+                  {{ item.quantity }}
+                </span>
+              } @else {
+                <span class="text-green-600 font-bold">{{ item.quantity }}</span>
+              }
+            </td>
+          </ng-container>
+
+          <!-- Status Column -->
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef> Status </th>
+            <td mat-cell *matCellDef="let item">
+              @if (item.isActive) {
+                <mat-chip color="primary" class="text-xs">Active</mat-chip>
+              } @else {
+                <mat-chip class="text-xs">Inactive</mat-chip>
+              }
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef> Actions </th>
+            <td mat-cell *matCellDef="let item">
+              <button mat-icon-button (click)="editItem(item)" matTooltip="Edit">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deleteItem(item)" matTooltip="Delete">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </div>
+
+      <!-- Paginator -->
+      <mat-paginator 
+        [length]="totalItems"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="[5, 10, 25, 50]"
+        (page)="onPageChange($event)"
+        showFirstLastButtons>
+      </mat-paginator>
+
+      <!-- Loading Indicator -->
+      @if (loading()) {
+        <div class="flex justify-center items-center p-8">
+          <mat-spinner></mat-spinner>
+        </div>
+      }
+
+      <!-- Empty State -->
+      @if (!loading() && dataSource.data.length === 0) {
+        <div class="text-center py-12 text-gray-400">
+          <mat-icon class="text-6xl mb-4">inventory_2</mat-icon>
+          <p class="text-lg">No inventory items found</p>
+          <button mat-raised-button color="primary" (click)="addNewItem()" class="mt-4">
+            Add Your First Item
+          </button>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+</div>
