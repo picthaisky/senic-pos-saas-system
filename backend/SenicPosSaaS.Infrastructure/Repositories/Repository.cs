@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Domain.Interfaces;
 using SenicPosSaaS.Infrastructure.Data;
 using System.Linq.Expressions;
 
 namespace SenicPosSaaS.Infrastructure.Repositories;
 
-public class Repository<T> : IRepository<T> where T : class
+public class Repository<T> : IRepository<T> where T : BaseEntity
 {
     protected readonly ApplicationDbContext _context;
     protected readonly DbSet<T> _dbSet;
@@ -18,7 +19,9 @@ public class Repository<T> : IRepository<T> where T : class
 
     public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await _dbSet.FindAsync(new object[] { id }, cancellationToken);
+        // A query (not Find) so the tenant query filter always applies: an id that belongs to
+        // another tenant is simply "not found".
+        return await _dbSet.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
     public virtual async Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default)

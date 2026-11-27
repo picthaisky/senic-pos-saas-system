@@ -1,8 +1,9 @@
 using System.Linq.Expressions;
+using SenicPosSaaS.Domain.Common;
 
 namespace SenicPosSaaS.Domain.Interfaces;
 
-public interface IRepository<T> where T : class
+public interface IRepository<T> where T : BaseEntity
 {
     Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default);

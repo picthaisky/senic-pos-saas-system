@@ -50,16 +50,16 @@ Edit `SenicPosSaaS.API/appsettings.Development.json`:
 }
 ```
 
-### Step 3: Run Migrations
+### Step 3: Migrations
+
+Nothing to do for local development: in the Development environment the API applies the
+migrations in `SenicPosSaaS.Infrastructure/Data/Migrations` and seeds demo data on startup.
+
+In any other environment apply them yourself before starting the API:
 
 ```bash
-cd backend/SenicPosSaaS.API
-
-# Add migration (first time)
-dotnet ef migrations add InitialCreate --project ../SenicPosSaaS.Infrastructure --startup-project .
-
-# Apply migration
-dotnet ef database update --project ../SenicPosSaaS.Infrastructure --startup-project .
+cd backend
+dotnet ef database update --project SenicPosSaaS.Infrastructure --startup-project SenicPosSaaS.API
 ```
 
 ### Step 4: Run Application
@@ -70,8 +70,11 @@ dotnet run
 ```
 
 Access:
-- API: `http://localhost:5000`
-- Swagger: `http://localhost:5000/swagger`
+- API: `http://localhost:5247`
+- Swagger: `http://localhost:5247/swagger`
+
+To run the web app against it, see `frontend/README.md` (`npm run dev`, port 5173).
+Sign-in details for the seeded demo users are in `backend/README.md`.
 
 ---
 
@@ -105,6 +108,7 @@ curl http://localhost:5000/health
 
 ### Step 3: Access Application
 
+- Web app: `http://localhost:8080` (nginx; also forwards `/api` to the API)
 - API: `http://localhost:5000`
 - Swagger UI: `http://localhost:5000/swagger`
 - PostgreSQL: `localhost:5432`
@@ -145,6 +149,10 @@ docker tag your-registry/senicpos-api:v1.0.0 your-registry/senicpos-api:latest
 # Push to registry
 docker push your-registry/senicpos-api:v1.0.0
 docker push your-registry/senicpos-api:latest
+
+# Web app (React + nginx)
+docker build -t your-registry/senicpos-web:v1.0.0 ../frontend
+docker push your-registry/senicpos-web:v1.0.0
 ```
 
 For local testing (Minikube):
@@ -164,10 +172,20 @@ kubectl apply -f k8s/namespace.yaml
 
 ### Step 3: Update Configurations
 
-Edit `k8s/postgres.yaml` and `k8s/deployment.yaml` to update:
+Edit `k8s/postgres.yaml`, `k8s/deployment.yaml` and `k8s/frontend.yaml` to update:
 - Database password
 - Connection strings
 - Docker image registry
+
+Create the secret that holds the signing key for access tokens. The API will not start
+without it, and it is deliberately not stored in the repository:
+
+```bash
+kubectl create secret generic senicpos-jwt-secret -n senicpos \
+  --from-literal=jwt-key="$(openssl rand -base64 48)"
+```
+
+Changing this key signs every user out, so keep the same value across deployments.
 
 ### Step 4: Deploy PostgreSQL
 
@@ -184,6 +202,9 @@ kubectl get svc -n senicpos
 
 ### Step 5: Deploy API
 
+The API does not migrate the database in Production. Apply the migrations first (see
+Option 1, Step 3) with a connection string that points at the cluster database.
+
 ```bash
 kubectl apply -f k8s/deployment.yaml
 
@@ -196,7 +217,18 @@ kubectl get pods -n senicpos
 kubectl get svc -n senicpos
 ```
 
-### Step 6: Access Application
+### Step 6: Deploy Web App
+
+```bash
+kubectl apply -f k8s/frontend.yaml
+kubectl wait --for=condition=ready pod -l app=senicpos-web -n senicpos --timeout=120s
+```
+
+Users reach the system through `senicpos-web-service`, which serves the app and forwards
+`/api` to the API. Expose it over HTTPS: outside Development the sign-in cookie is marked
+`Secure`, so sign-in does not survive a page reload over plain HTTP.
+
+### Step 7: Access Application
 
 **Local Cluster (Minikube/Kind)**:
 ```bash
@@ -216,7 +248,7 @@ kubectl get svc senicpos-api-service -n senicpos
 # Access via: http://<EXTERNAL-IP>
 ```
 
-### Step 7: View Logs
+### Step 8: View Logs
 
 ```bash
 # API logs
@@ -229,7 +261,7 @@ kubectl logs -f deployment/postgres -n senicpos
 kubectl logs -f <pod-name> -n senicpos
 ```
 
-### Step 8: Scale Application
+### Step 9: Scale Application
 
 ```bash
 # Manual scaling

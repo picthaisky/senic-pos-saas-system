@@ -1,12 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SenicPosSaaS.API.Auth;
 using SenicPosSaaS.Application.DTOs.Customer;
 using SenicPosSaaS.Application.Interfaces;
 
 namespace SenicPosSaaS.API.Controllers;
 
-[ApiController]
 [Route("api/[controller]")]
-public class CustomersController : ControllerBase
+public class CustomersController : TenantControllerBase
 {
     private readonly ICustomerService _customerService;
     private readonly ILogger<CustomersController> _logger;
@@ -17,23 +18,15 @@ public class CustomersController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Create a new customer
-    /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CustomerDto>> CreateCustomer([FromBody] CreateCustomerDto dto, CancellationToken cancellationToken)
+    [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<CustomerDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<CustomerDto>>> GetCustomers([FromQuery] string? search, CancellationToken cancellationToken)
     {
-        var customer = await _customerService.CreateCustomerAsync(dto, cancellationToken);
-        _logger.LogInformation("Customer {CustomerName} created successfully", customer.FullName);
-        return CreatedAtAction(nameof(GetCustomerById), new { id = customer.Id }, customer);
+        var customers = await _customerService.SearchCustomersAsync(TenantId, search, cancellationToken);
+        return Ok(customers);
     }
 
-    /// <summary>
-    /// Get customer by ID
-    /// </summary>
-    [HttpGet("{id}")]
+    [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomerDto>> GetCustomerById(Guid id, CancellationToken cancellationToken)
@@ -45,32 +38,85 @@ public class CustomersController : ControllerBase
         return Ok(customer);
     }
 
-    /// <summary>
-    /// Get all customers for a tenant
-    /// </summary>
-    [HttpGet("tenant/{tenantId}")]
-    [ProducesResponseType(typeof(IEnumerable<CustomerDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<CustomerDto>>> GetCustomersByTenantId(Guid tenantId, CancellationToken cancellationToken)
+    [HttpPost]
+    [Authorize(Roles = Roles.Sellers)]
+    [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CustomerDto>> CreateCustomer([FromBody] CreateCustomerDto dto, CancellationToken cancellationToken)
     {
-        var customers = await _customerService.GetCustomersByTenantIdAsync(tenantId, cancellationToken);
-        return Ok(customers);
+        dto.TenantId = TenantId;
+        var customer = await _customerService.CreateCustomerAsync(dto, cancellationToken);
+        _logger.LogInformation("Customer {CustomerId} created successfully", customer.Id);
+        return CreatedAtAction(nameof(GetCustomerById), new { id = customer.Id }, customer);
     }
 
-    /// <summary>
-    /// Add loyalty points to a customer
-    /// </summary>
-    [HttpPost("{id}/loyalty-points")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = Roles.Managers)]
+    [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AddLoyaltyPoints(Guid id, [FromBody] AddLoyaltyPointsRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CustomerDto>> UpdateCustomer(Guid id, [FromBody] UpdateCustomerDto dto, CancellationToken cancellationToken)
     {
-        var result = await _customerService.AddLoyaltyPointsAsync(id, request.Points, cancellationToken);
-        if (!result)
+        var customer = await _customerService.UpdateCustomerAsync(id, dto, cancellationToken);
+        if (customer == null)
+            return NotFound();
+
+        return Ok(customer);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = Roles.Managers)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteCustomer(Guid id, CancellationToken cancellationToken)
+    {
+        var deleted = await _customerService.DeleteCustomerAsync(id, cancellationToken);
+        if (!deleted)
+            return NotFound();
+
+        _logger.LogInformation("Customer {CustomerId} deleted", id);
+        return NoContent();
+    }
+
+    [HttpGet("{id:guid}/loyalty")]
+    [ProducesResponseType(typeof(IEnumerable<LoyaltyTransactionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IEnumerable<LoyaltyTransactionDto>>> GetLoyaltyHistory(Guid id, CancellationToken cancellationToken)
+    {
+        var history = await _customerService.GetLoyaltyHistoryAsync(id, cancellationToken);
+        if (history == null)
+            return NotFound();
+
+        return Ok(history);
+    }
+
+    [HttpPost("{id:guid}/loyalty/earn")]
+    [Authorize(Roles = Roles.Sellers)]
+    [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CustomerDto>> EarnPoints(Guid id, [FromBody] LoyaltyPointsRequestDto request, CancellationToken cancellationToken)
+    {
+        var customer = await _customerService.EarnPointsAsync(id, request.Points, request.Description?.Trim() ?? string.Empty, cancellationToken);
+        if (customer == null)
             return NotFound();
 
         _logger.LogInformation("Added {Points} loyalty points to customer {CustomerId}", request.Points, id);
-        return Ok(new { message = "Loyalty points added successfully" });
+        return Ok(customer);
+    }
+
+    [HttpPost("{id:guid}/loyalty/redeem")]
+    [Authorize(Roles = Roles.Sellers)]
+    [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CustomerDto>> RedeemPoints(Guid id, [FromBody] LoyaltyPointsRequestDto request, CancellationToken cancellationToken)
+    {
+        var customer = await _customerService.RedeemPointsAsync(id, request.Points, request.Description?.Trim() ?? string.Empty, cancellationToken);
+        if (customer == null)
+            return NotFound();
+
+        _logger.LogInformation("Redeemed {Points} loyalty points from customer {CustomerId}", request.Points, id);
+        return Ok(customer);
     }
 }
-
-public record AddLoyaltyPointsRequest(int Points);

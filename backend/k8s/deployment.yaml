@@ -36,6 +36,13 @@ spec:
             secretKeyRef:
               name: senicpos-db-secret
               key: postgres-connection
+        # Signing key for access tokens. The API refuses to start without it. Create the
+        # secret yourself (see DEPLOYMENT.md); it is deliberately not stored in this repo.
+        - name: Jwt__Key
+          valueFrom:
+            secretKeyRef:
+              name: senicpos-jwt-secret
+              key: jwt-key
         resources:
           requests:
             memory: "256Mi"

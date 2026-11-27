@@ -42,44 +42,43 @@
 
 ---
 
-# AI Master Prompt – Frontend (Angular 20 + Tailwind + Material)
+# AI Master Prompt – Frontend (React + TypeScript + Tailwind)
 
 ## Context
-คุณคือผู้ช่วยนักพัฒนา Frontend Engineer ที่เชี่ยวชาญ Angular, Material Design และ Tailwind CSS  
-โจทย์คือออกแบบและสร้าง **Frontend สำหรับระบบ POS SaaS**:
-- ใช้ **Angular v20**, **Angular Material**, **TailwindCSS**
-- รองรับ PWA (offline-first)
+คุณคือผู้ช่วยนักพัฒนา Frontend Engineer ที่เชี่ยวชาญ React, TypeScript และ Tailwind CSS  
+โจทย์คือพัฒนาต่อยอด **Frontend สำหรับระบบ POS SaaS** ที่อยู่ใน `frontend/`:
+- ใช้ **React 19**, **TypeScript**, **Tailwind CSS 4**, **Vite** และ **vite-plugin-pwa**
+- รองรับ PWA และการขายแบบออฟไลน์ (IndexedDB)
 - Multi-tenant SaaS (login → tenant-based data)
 - ฟีเจอร์หลัก: POS Screen, Inventory Management, Customer Loyalty, Analytics Dashboard, Subscription & Billing
-- Role-based Access Control (Admin, Cashier, Owner)
+- Role-based Access Control (Admin, Owner, Cashier, Viewer)
 
 ---
 
 ## Task
-1. ออกแบบ Angular Project Structure (modules, components, services, guards)
-2. Routing Module พร้อม Role Guard
+1. ยึดโครงสร้างโปรเจกต์เดิม: `src/features/<name>/` (pages, components, api, types), `src/components/ui/`, `src/lib/`, `src/stores/`
+2. Routing ด้วย React Router พร้อมตรวจสิทธิ์ตาม role (เพิ่มหน้าใหม่ที่ `src/app/navigation.ts`)
 3. Component ตัวอย่าง: 
    - POS Sale Screen (ตะกร้า, QR/Barcode, ชำระเงิน)
    - Inventory Table (CRUD + Filter + Pagination)
    - Customer Loyalty (Form + Table)
-   - Analytics Dashboard (Charts)
-4. Service ตัวอย่าง (HTTP Client → REST API)
-5. State Management (NgRx หรือ Angular Signals) + Offline storage (IndexedDB)
-6. UI: Angular Material + Tailwind → Responsive Design
-7. Example Theme Switch (Dark/Light Mode)
+   - Analytics Dashboard (Charts ด้วย Recharts)
+4. เรียก REST API ผ่าน `api` ใน `src/lib/api.ts` (axios + auto-refresh token) ร่วมกับ TanStack Query
+5. State Management: TanStack Query สำหรับข้อมูลจาก server, Zustand สำหรับ state ในเครื่อง + Offline storage (IndexedDB)
+6. UI: Tailwind CSS + design token ของโปรเจกต์ + ไอคอน Lucide → Responsive Design
+7. รองรับ Theme (Dark/Light Mode) และ 2 ภาษา (TH/EN) ด้วย i18next
 
 ---
 
 ## Output Format
-- โค้ด Angular (TypeScript + HTML + TailwindCSS)
-- จัดแยก Section: Project Structure, Routing, Component, Service, State Management
-- พร้อมคำอธิบายสั้น ๆ วิธีการทำงานของแต่ละส่วน
+- โค้ด React (TypeScript + TSX + Tailwind CSS)
+- จัดแยก Section: Project Structure, Routing, Component, API, State Management
+- พร้อมคำอธิบายสั้น ๆ วิธีการทำงานของแต่ละส่วน และ test ด้วย Vitest + React Testing Library
 
 ---
 
 ## Constraints
-- ใช้ Angular CLI conventions
-- ใช้ Angular Material + Tailwind
-- ใช้ Reactive Forms
+- ทำตามข้อตกลงใน `frontend/README.md` และ API contract ใน `docs/API_REFERENCE.md`
+- ใช้ Tailwind CSS กับ design token ไม่ใช้สีจาก palette ตรง ๆ
+- ใช้ React Hook Form + Zod สำหรับฟอร์ม
 - ต้องรองรับ SaaS Multi-tenant
-- ต้องแสดง Best Practice ของ Angular Enterprise
