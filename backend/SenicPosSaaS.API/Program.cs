@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Serilog;
 using SenicPosSaaS.API.Auth;
 using SenicPosSaaS.API.Push;
@@ -48,18 +48,18 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Multi-tenant POS SaaS System API with Clean Architecture"
     });
 
-    var bearer = new OpenApiSecurityScheme
+    // Lets Swagger UI send the access token (the Authorize button).
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name = "Authorization",
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Access token from POST /api/auth/login",
-        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-    };
-    c.AddSecurityDefinition("Bearer", bearer);
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement { [bearer] = Array.Empty<string>() });
+        Description = "Access token from POST /api/auth/login"
+    });
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
 });
 
 // Configure Database - PostgreSQL by default, SQL Server optional
@@ -182,14 +182,30 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "Senic POS SaaS API v1"));
 
-    // Auto-migrate and seed database in development
+}
+
+// Database setup at startup:
+// - Development always migrates and seeds demo data.
+// - Elsewhere, Database:MigrateOnStartup=true applies pending migrations. Meant for a
+//   single-instance deployment (Docker Compose); with several replicas starting at once, run
+//   `dotnet ef database update` as a separate step instead.
+// - Bootstrap:* creates the first user of a new installation (see BootstrapOptions).
+var bootstrap = app.Configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? new BootstrapOptions();
+var migrateOnStartup = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:MigrateOnStartup");
+if (migrateOnStartup || bootstrap.IsConfigured)
+{
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await context.Database.MigrateAsync();
-    await DbInitializer.SeedAsync(
-        context,
-        scope.ServiceProvider.GetRequiredService<IPasswordHasher>(),
-        app.Configuration["Seed:DemoPassword"]);
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+    if (migrateOnStartup)
+        await context.Database.MigrateAsync();
+
+    if (app.Environment.IsDevelopment())
+        await DbInitializer.SeedAsync(context, passwordHasher, app.Configuration["Seed:DemoPassword"]);
+
+    if (await DbInitializer.BootstrapOwnerAsync(context, passwordHasher, bootstrap))
+        app.Logger.LogWarning("Bootstrap: created the first user {Email} for tenant {TenantId}. Remove Bootstrap__OwnerPassword from the configuration now.", bootstrap.OwnerEmail, bootstrap.TenantId);
 }
 
 app.UseSerilogRequestLogging();

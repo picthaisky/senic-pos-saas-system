@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 import * as matchers from '@testing-library/jest-dom/matchers'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import 'fake-indexeddb/auto' // jsdom has no IndexedDB; the offline catalog and order queue use it
 import '@/i18n'
 
@@ -11,6 +11,11 @@ import '@/i18n'
 expect.extend(matchers)
 
 afterEach(() => cleanup())
+
+// The first render of a lazily loaded page imports its whole chunk (the dashboard pulls in the
+// chart library), which can take longer than the default 1s wait on a busy machine or CI
+// runner. Waiting longer costs nothing when the element appears quickly.
+configure({ asyncUtilTimeout: 5000 })
 
 // Browser APIs that jsdom does not implement.
 

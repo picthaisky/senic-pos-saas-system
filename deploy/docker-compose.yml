@@ -1,0 +1,79 @@
+# Production stack for Senic POS, deployed by Portainer from this Git repository
+# (Stacks → Add stack → Git Repository, compose path: deploy/docker-compose.yml).
+# Setup guide: deploy/README.md
+#
+# Values written as ${NAME} come from the stack's environment variables in Portainer.
+# ${NAME:?message} means the stack refuses to start until that variable is set.
+#
+# The images are built and pushed by .github/workflows/deploy.yml.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: SenicPosDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the stack environment variables}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d SenicPosDb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Not published to the host: only the API talks to the database.
+
+  api:
+    image: ${IMAGE_REGISTRY:-ghcr.io/picthaisky}/senic-pos-saas-system-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      UsePostgreSQL: "true"
+      # Do not use ";" in the password: it separates the parts of this connection string.
+      ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=SenicPosDb;Username=postgres;Password=${POSTGRES_PASSWORD}
+      # One API container, so it can safely apply database migrations when it starts.
+      Database__MigrateOnStartup: "true"
+      # Signing key for access tokens, at least 32 characters. Changing it signs everyone out.
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY (32+ random characters) in the stack environment variables}
+      Business__TimeZone: ${BUSINESS_TIMEZONE:-Asia/Bangkok}
+      # First user of a new installation. Used once; see deploy/README.md.
+      Bootstrap__TenantId: ${BOOTSTRAP_TENANT_ID:-}
+      Bootstrap__OwnerEmail: ${BOOTSTRAP_OWNER_EMAIL:-}
+      Bootstrap__OwnerPassword: ${BOOTSTRAP_OWNER_PASSWORD:-}
+      # Optional: push notifications (all three, or none).
+      Push__PublicKey: ${PUSH_PUBLIC_KEY:-}
+      Push__PrivateKey: ${PUSH_PRIVATE_KEY:-}
+      Push__Subject: ${PUSH_SUBJECT:-}
+    volumes:
+      - api-logs:/app/logs
+    networks:
+      - internal
+    # The image has its own HEALTHCHECK (GET /health); `web` waits for it below.
+
+  web:
+    image: ${IMAGE_REGISTRY:-ghcr.io/picthaisky}/senic-pos-saas-system-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: http://api:8080
+    ports:
+      # The only published port. Put an HTTPS reverse proxy in front of it: outside development
+      # the sign-in cookie is Secure, so sign-in does not survive a reload over plain http.
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  postgres-data:
+  api-logs:

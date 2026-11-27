@@ -60,6 +60,8 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
+      // Room for several 5s waits (see asyncUtilTimeout in the setup file) within one test.
+      testTimeout: 20_000,
       alias: {
         'virtual:pwa-register/react': fileURLToPath(
           new URL('./src/test/pwa-register-stub.ts', import.meta.url),

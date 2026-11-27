@@ -8,7 +8,7 @@
   - Local: Minikube, Kind, or Docker Desktop K8s
   - Cloud: AKS, EKS, GKE
 - kubectl CLI (for Kubernetes deployment)
-- .NET 9 SDK (for local development)
+- .NET 10 SDK (for local development)
 
 ### Database Options
 - **PostgreSQL 16+** (Recommended)

@@ -142,6 +142,41 @@ public static class DbInitializer
         await context.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Creates the first Owner of the configured tenant, if that tenant has no users yet.
+    /// Safe to run on every start: once the tenant has a user it does nothing, so leaving the
+    /// settings in place can never reset a password or add a second account.
+    /// Returns true when a user was created.
+    /// </summary>
+    public static async Task<bool> BootstrapOwnerAsync(ApplicationDbContext context, IPasswordHasher passwordHasher, BootstrapOptions options)
+    {
+        if (!options.IsConfigured)
+            return false;
+
+        if (options.TenantId is not { } tenantId || tenantId == Guid.Empty)
+            throw new InvalidOperationException("Bootstrap:TenantId must be a GUID when Bootstrap:OwnerEmail is set.");
+        if (options.OwnerPassword.Length < BootstrapOptions.MinimumPasswordLength)
+            throw new InvalidOperationException($"Bootstrap:OwnerPassword must be at least {BootstrapOptions.MinimumPasswordLength} characters.");
+
+        if (context.Users.Any(u => u.TenantId == tenantId))
+            return false;
+
+        context.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            // Sign-in looks emails up in lower case.
+            Email = options.OwnerEmail.Trim().ToLower(),
+            Name = string.IsNullOrWhiteSpace(options.OwnerName) ? "Owner" : options.OwnerName.Trim(),
+            PasswordHash = passwordHasher.Hash(options.OwnerPassword),
+            Role = UserRole.Owner,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        return true;
+    }
+
     /// <summary>One user per role: admin@, owner@, cashier@ and viewer@demo.test.</summary>
     private static async Task SeedUsersAsync(ApplicationDbContext context, IPasswordHasher passwordHasher, string? demoPassword)
     {

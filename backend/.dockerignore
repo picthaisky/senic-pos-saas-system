@@ -1,0 +1,10 @@
+# Build output and local files must not go into the image build context: the image restores and
+# builds from source, and stale bin/obj folders from the host can break that build.
+**/bin/
+**/obj/
+logs/
+**/logs/
+.vs/
+*.user
+k8s/
+*.md

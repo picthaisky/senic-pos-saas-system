@@ -11,6 +11,14 @@ server {
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml application/manifest+json;
 
+    # The API's health endpoint, exposed so a deployment can check the stack from outside:
+    # it answers only when nginx, the API and (at start-up) the database are all working.
+    location = /health {
+        proxy_pass ${API_UPSTREAM};
+        proxy_set_header Host $host;
+        add_header Cache-Control "no-store";
+    }
+
     # API and SignalR hubs
     location /api/ {
         proxy_pass ${API_UPSTREAM};

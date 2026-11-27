@@ -33,7 +33,7 @@ backend/
 ## ✅ Completed Requirements Checklist
 
 ### 1. Project Structure ✅
-- [x] .NET 9 Solution with Clean Architecture
+- [x] .NET 10 Solution with Clean Architecture
 - [x] Domain Layer (Entities, Enums, Interfaces)
 - [x] Application Layer (DTOs, Services, Interfaces)
 - [x] Infrastructure Layer (Repositories, DbContext, Data)
@@ -65,7 +65,7 @@ backend/
 ### 4. Data Access Layer ✅
 - [x] Generic Repository pattern
 - [x] Specific repositories for each entity
-- [x] EF Core 9 DbContext
+- [x] EF Core 10 DbContext
 - [x] PostgreSQL support (primary)
 - [x] SQL Server support (optional)
 - [x] Database seeding with sample data
@@ -370,9 +370,9 @@ This implementation provides a **complete, production-ready foundation** for a M
 ✅ **Swagger UI** for easy API exploration
 
 ### Technologies Used
-- .NET 9 (Latest)
+- .NET 10
 - C# 13
-- Entity Framework Core 9
+- Entity Framework Core 10
 - PostgreSQL 16 / SQL Server
 - Docker & Kubernetes
 - xUnit, Moq, FluentAssertions
@@ -397,4 +397,4 @@ Ready to use, easy to extend, and built to scale! 🚀
 
 ---
 
-*Built with ❤️ using .NET 9, Clean Architecture, and software engineering best practices*
+*Built with ❤️ using .NET 10, Clean Architecture, and software engineering best practices*

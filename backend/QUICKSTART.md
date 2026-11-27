@@ -221,4 +221,4 @@ Explore the features, check out the code organization, and customize it for your
 
 ---
 
-**Built with ❤️ using .NET 9, Clean Architecture, and best practices**
+**Built with ❤️ using .NET 10, Clean Architecture, and best practices**

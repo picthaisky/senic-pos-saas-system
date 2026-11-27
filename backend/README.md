@@ -3,8 +3,8 @@
 ## 📋 Overview
 
 This is a comprehensive **Multi-Tenant POS SaaS Backend API** built with:
-- **.NET 9** (C#)
-- **Entity Framework Core 9**
+- **.NET 10** (C#)
+- **Entity Framework Core 10**
 - **PostgreSQL** (primary) / **SQL Server** (optional)
 - **Clean Architecture** (Domain → Application → Infrastructure → API)
 - **Repository Pattern** + **Service Layer**
@@ -147,7 +147,7 @@ SenicPosSaaS/
 ## 🔧 Setup & Installation
 
 ### Prerequisites
-- .NET 9 SDK
+- .NET 10 SDK
 - PostgreSQL 16+ or SQL Server 2019+
 - Docker (optional)
 - Kubernetes cluster (optional)
@@ -207,6 +207,8 @@ into **Authorize**.
 | --- | --- |
 | `Jwt__Key` | Signing key for access tokens, at least 32 characters. Required: the API refuses to start without it. |
 | `Cors__AllowedOrigins__0` | Origin of the frontend when it is served from a different origin than the API. |
+| `Database__MigrateOnStartup` | `true` applies pending migrations when the API starts. For single-instance deployments only. |
+| `Bootstrap__TenantId`, `Bootstrap__OwnerEmail`, `Bootstrap__OwnerPassword` | Creates the first Owner of a tenant that has no users yet (password 12+ characters). Remove the password afterwards. |
 | `Business__TimeZone` | Time zone used for report days and date filters. Default `Asia/Bangkok`. |
 | `Push__PublicKey`, `Push__PrivateKey` | VAPID key pair for push notifications. Optional: without them push is off and everything else works. |
 | `Push__Subject` | Contact for the push services, e.g. `mailto:admin@your-domain`. Required with the keys. |
@@ -379,7 +381,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -392,7 +394,7 @@ jobs:
 
 ## 📚 Additional Resources
 
-- [.NET 9 Documentation](https://learn.microsoft.com/en-us/dotnet/)
+- [.NET 10 Documentation](https://learn.microsoft.com/en-us/dotnet/)
 - [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/)
 - [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 - [Docker Documentation](https://docs.docker.com/)

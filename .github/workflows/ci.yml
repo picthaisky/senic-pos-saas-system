@@ -1,0 +1,70 @@
+name: CI
+
+# Runs on every pull request. deploy.yml calls it too for pushes to main, so nothing is
+# deployed unless these checks pass on the exact commit being deployed.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        working-directory: backend
+        run: dotnet test --configuration Release
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+  deploy-files:
+    name: Deployment files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test the Portainer script
+        run: node --test deploy/portainer.test.mjs
+
+      - name: Validate the stack file
+        # Placeholder values: this checks the syntax and that the required variables are wired.
+        env:
+          POSTGRES_PASSWORD: placeholder
+          JWT_KEY: placeholder
+        run: docker compose -f deploy/docker-compose.yml config --quiet

@@ -7,7 +7,7 @@
 
 โครงการนี้ประกอบด้วย:
 
-- **Backend API** → `.NET 9` + `Entity Framework Core` + `PostgreSQL`
+- **Backend API** → `.NET 10` + `Entity Framework Core` + `PostgreSQL`
 - **Frontend** → `React 19` + `TypeScript` + `Tailwind CSS 4` + `Vite` (PWA ขายแบบออฟไลน์ได้)
 - รองรับการ Deploy ด้วย Docker/Kubernetes
 - มีเอกสาร Prompt แยกสำหรับ Backend และ Frontend เพื่อช่วยให้ AI สามารถ Generate/ออกแบบโค้ดตามหลักการเดียวกัน
@@ -35,7 +35,7 @@
 
 ### Backend
 
-- .NET 9 (C#), ASP.NET Core Web API
+- .NET 10 (C#), ASP.NET Core Web API
 - Entity Framework Core + PostgreSQL (migrations อยู่ใน repo)
 - JWT Authentication, Role-Based Access
 - Clean Architecture + Repository Pattern
@@ -53,6 +53,7 @@
 ### DevOps / Infra
 
 - Docker, Docker Compose
+- CI/CD with GitHub Actions: tests, images on GHCR, deployment through a Portainer Git-based stack
 - Kubernetes manifests (`backend/k8s/`)
 
 ---
@@ -61,7 +62,7 @@
 
 ```plaintext
 senic-pos-saas-system/
-│── backend/                  # Backend API (.NET 9)
+│── backend/                  # Backend API (.NET 10)
 │    ├── SenicPosSaaS.API/            # Controllers, authentication, startup
 │    ├── SenicPosSaaS.Application/    # Services, DTOs
 │    ├── SenicPosSaaS.Domain/         # Entities, repository interfaces
@@ -77,6 +78,8 @@ senic-pos-saas-system/
 │    ├── src/stores/         # Zustand stores
 │    ├── Dockerfile          # nginx image serving the built app
 │    └── README.md
+│── deploy/                   # Production stack for Portainer and its automation
+│── .github/workflows/        # CI, image build and deployment
 │── docs/
 │    ├── API_REFERENCE.md    # API contract between frontend and backend
 │    └── prompts/            # AI Context Engineering Prompts
@@ -205,7 +208,8 @@ cd frontend && npm test
 - **[frontend/README.md](frontend/README.md)** – Frontend setup, mock mode, offline behaviour, code conventions
 - **[backend/README.md](backend/README.md)** – Backend setup, sign-in, configuration
 - **[backend/ARCHITECTURE.md](backend/ARCHITECTURE.md)** – Clean architecture documentation
-- **[backend/DEPLOYMENT.md](backend/DEPLOYMENT.md)** – Docker Compose and Kubernetes deployment
+- **[deploy/README.md](deploy/README.md)** – CI/CD: GitHub Actions, images on GHCR, Portainer Git-based stack
+- **[backend/DEPLOYMENT.md](backend/DEPLOYMENT.md)** – Local Docker Compose and Kubernetes deployment
 - **[docs/prompts/AI_PROMPT_FRONTEND.md](docs/prompts/AI_PROMPT_FRONTEND.md)** – Frontend AI context
 - **[docs/prompts/AI_PROMPT_BACKEND.md](docs/prompts/AI_PROMPT_BACKEND.md)** – Backend AI context
 
