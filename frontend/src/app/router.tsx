@@ -23,6 +23,8 @@ const pages: Record<string, () => Promise<{ Component: ComponentType }>> = {
     })),
   '/users': () =>
     import('@/features/users/pages/UsersPage').then((m) => ({ Component: m.UsersPage })),
+  '/audit': () =>
+    import('@/features/audit/pages/AuditPage').then((m) => ({ Component: m.AuditPage })),
 }
 
 // Exported as plain route objects so tests can mount them in a memory router.

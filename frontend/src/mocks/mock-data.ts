@@ -1,4 +1,5 @@
 import type { Customer, LoyaltyTransaction } from '@/features/customers/types'
+import type { AuditEntry } from '@/features/audit/api'
 import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types'
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
@@ -234,12 +235,90 @@ const users: ManagedUser[] = [
   },
 ]
 
+// A fixed history, newest first. The mock does not record new changes.
+const auditLog: AuditEntry[] = [
+  {
+    id: 'a5',
+    createdAt: '2026-11-27T04:10:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'InventoryItem',
+    entityId: 'i2',
+    entityLabel: 'ข้าวสาร 1 กก.',
+    changes: { quantity: { old: 3, new: 20 }, price: { old: 42, new: 45 } },
+  },
+  {
+    id: 'a4',
+    createdAt: '2026-11-26T10:30:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'Order',
+    entityId: 'o9',
+    entityLabel: 'ORD-20261126-AB12CD34',
+    changes: { status: { old: 'Completed', new: 'Cancelled' } },
+  },
+  {
+    id: 'a3',
+    createdAt: '2026-11-25T08:00:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'User',
+    entityId: 'u3',
+    entityLabel: 'wichai@shop.test',
+    changes: {
+      role: { old: 'Cashier', new: 'Viewer' },
+      isActive: { old: true, new: false },
+      passwordHash: { old: '***', new: '***' },
+    },
+  },
+  {
+    id: 'a2',
+    createdAt: '2026-11-24T03:20:00Z',
+    userId: 'gone',
+    userName: null,
+    action: 'Deleted',
+    entityType: 'Customer',
+    entityId: 'c9',
+    entityLabel: 'ลูกค้า เก่า',
+    changes: { firstName: { old: 'ลูกค้า', new: null }, lastName: { old: 'เก่า', new: null } },
+  },
+  {
+    id: 'a1',
+    createdAt: '2026-11-23T02:00:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Created',
+    entityType: 'InventoryItem',
+    entityId: 'i7',
+    entityLabel: 'ขนมปังแผ่น',
+    changes: { name: { old: null, new: 'ขนมปังแผ่น' }, quantity: { old: null, new: 30 } },
+  },
+]
+
 const conflict = (detail: string): MockResult => ({
   status: 409,
   data: { title: 'Conflict', status: 409, detail },
 })
 
 export const dataRoutes: MockRoute[] = [
+  // Audit trail
+  [
+    'GET',
+    '/audit-logs',
+    ({ query }) => {
+      const page = Math.max(Number(query.page ?? 1), 1)
+      const pageSize = Math.min(Math.max(Number(query.pageSize ?? 20), 1), 100)
+      const matching = auditLog.filter(
+        (entry) => !query.entityType || entry.entityType === query.entityType,
+      )
+      const items = matching.slice((page - 1) * pageSize, page * pageSize)
+      return { status: 200, data: { items, total: matching.length, page, pageSize } }
+    },
+  ],
+
   // Users
   ['GET', '/users', () => ({ status: 200, data: users.map((user) => ({ ...user })) })],
   [

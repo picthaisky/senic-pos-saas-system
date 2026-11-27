@@ -41,6 +41,7 @@
     "inventory": "Inventory",
     "customers": "Customers",
     "users": "Users",
+    "audit": "Change history",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
   },
@@ -186,6 +187,63 @@
     "otherDevicesHint": "At least 8 characters. Other devices signed in to this account will be signed out.",
     "passwordChanged": "Password changed",
     "wrongCurrentPassword": "The current password is incorrect"
+  },
+  "audit": {
+    "time": "Time",
+    "user": "By",
+    "unknownUser": "Deleted user",
+    "action": "Action",
+    "entity": "Record",
+    "changes": "What changed",
+    "changedTo": "changed to",
+    "filterType": "Record type",
+    "allTypes": "All types",
+    "empty": "No changes recorded yet",
+    "yes": "Yes",
+    "no": "No",
+    "actions": {
+      "Created": "Added",
+      "Updated": "Edited",
+      "Deleted": "Deleted"
+    },
+    "types": {
+      "InventoryItem": "Item",
+      "Customer": "Customer",
+      "Order": "Bill",
+      "User": "User"
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "sku": "SKU",
+      "barcode": "Barcode",
+      "category": "Category",
+      "price": "Price",
+      "cost": "Cost",
+      "quantity": "In stock",
+      "minimumStock": "Reorder point",
+      "imageUrl": "Image",
+      "isActive": "Active",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address",
+      "dateOfBirth": "Date of birth",
+      "loyaltyPoints": "Points",
+      "status": "Bill status",
+      "role": "Role",
+      "passwordHash": "Password changed"
+    },
+    "values": {
+      "Admin": "Administrator",
+      "Owner": "Owner",
+      "Cashier": "Cashier",
+      "Viewer": "Viewer",
+      "Pending": "Pending",
+      "Completed": "Completed",
+      "Cancelled": "Cancelled"
+    }
   },
   "pos": {
     "scanBarcode": "Scan barcode",

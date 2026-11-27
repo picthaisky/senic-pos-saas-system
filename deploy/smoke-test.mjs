@@ -192,6 +192,13 @@ if (!credentials) {
     const afterCancel = await call('GET', `/api/inventory/${item.json?.id}`)
     check('cancelling returns the stock', cancel.status === 200 && afterCancel.json?.quantity === 3, `quantity ${afterCancel.json?.quantity}`)
 
+    const trail = await call('GET', `/api/audit-logs?entityType=Order&entityId=${walkIn.json?.id}`)
+    check(
+      'the cancellation is in the change history, with who did it',
+      trail.status === 200 && trail.json?.items?.[0]?.changes?.status?.new === 'Cancelled' && !!trail.json.items[0].userName,
+      `status ${trail.status}`,
+    )
+
     const remove = await call('DELETE', `/api/customers/${second.json?.id}`)
     check('delete customer', remove.status === 204, `status ${remove.status}`)
 

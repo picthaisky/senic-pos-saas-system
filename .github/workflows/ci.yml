@@ -121,6 +121,23 @@ jobs:
           EXPECTED_VERSION: ci
         run: node deploy/smoke-test.mjs
 
+      - name: Backup and restore rehearsal
+        run: |
+          compose() { docker compose -p ci --env-file "$RUNNER_TEMP/stack.env" -f deploy/docker-compose.yml "$@"; }
+          # The deployment itself must have produced a dump before the API started.
+          compose exec -T backup sh -c 'ls /backups/predeploy-*.dump'
+          # A dump taken now holds what the smoke test created; it must restore into an empty database.
+          compose exec -T backup sh -c '
+            set -eu
+            pg_dump -Fc -f /backups/manual-ci.dump
+            createdb restore_check
+            pg_restore --no-owner -d restore_check /backups/manual-ci.dump
+            live=$(psql -tAc "select count(*) from \"Orders\"")
+            restored=$(psql -d restore_check -tAc "select count(*) from \"Orders\"")
+            echo "orders: live=$live restored=$restored"
+            [ "$live" -gt 0 ] && [ "$live" = "$restored" ]
+            dropdb restore_check'
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci

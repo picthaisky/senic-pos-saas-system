@@ -41,6 +41,7 @@
     "inventory": "สินค้าคงคลัง",
     "customers": "ลูกค้า",
     "users": "ผู้ใช้งาน",
+    "audit": "ประวัติการแก้ไข",
     "openMenu": "เปิดเมนู",
     "closeMenu": "ปิดเมนู"
   },
@@ -185,6 +186,63 @@
     "otherDevicesHint": "อย่างน้อย 8 ตัวอักษร อุปกรณ์อื่นที่เข้าสู่ระบบด้วยบัญชีนี้จะถูกออกจากระบบ",
     "passwordChanged": "เปลี่ยนรหัสผ่านแล้ว",
     "wrongCurrentPassword": "รหัสผ่านปัจจุบันไม่ถูกต้อง"
+  },
+  "audit": {
+    "time": "เวลา",
+    "user": "ผู้ทำ",
+    "unknownUser": "ผู้ใช้ที่ถูกลบ",
+    "action": "การกระทำ",
+    "entity": "รายการ",
+    "changes": "สิ่งที่เปลี่ยน",
+    "changedTo": "เปลี่ยนเป็น",
+    "filterType": "ประเภทรายการ",
+    "allTypes": "ทุกประเภท",
+    "empty": "ยังไม่มีประวัติการแก้ไข",
+    "yes": "ใช่",
+    "no": "ไม่ใช่",
+    "actions": {
+      "Created": "เพิ่ม",
+      "Updated": "แก้ไข",
+      "Deleted": "ลบ"
+    },
+    "types": {
+      "InventoryItem": "สินค้า",
+      "Customer": "ลูกค้า",
+      "Order": "บิลขาย",
+      "User": "ผู้ใช้งาน"
+    },
+    "fields": {
+      "name": "ชื่อ",
+      "description": "รายละเอียด",
+      "sku": "SKU",
+      "barcode": "บาร์โค้ด",
+      "category": "หมวดหมู่",
+      "price": "ราคาขาย",
+      "cost": "ต้นทุน",
+      "quantity": "คงเหลือ",
+      "minimumStock": "จุดสั่งซื้อ",
+      "imageUrl": "รูปภาพ",
+      "isActive": "เปิดใช้งาน",
+      "firstName": "ชื่อ",
+      "lastName": "นามสกุล",
+      "email": "อีเมล",
+      "phone": "เบอร์โทร",
+      "address": "ที่อยู่",
+      "dateOfBirth": "วันเกิด",
+      "loyaltyPoints": "แต้มสะสม",
+      "status": "สถานะบิล",
+      "role": "สิทธิ์",
+      "passwordHash": "เปลี่ยนรหัสผ่าน"
+    },
+    "values": {
+      "Admin": "ผู้ดูแลระบบ",
+      "Owner": "เจ้าของร้าน",
+      "Cashier": "แคชเชียร์",
+      "Viewer": "ผู้ดูข้อมูล",
+      "Pending": "รอดำเนินการ",
+      "Completed": "สำเร็จ",
+      "Cancelled": "ยกเลิก"
+    }
   },
   "pos": {
     "scanBarcode": "สแกนบาร์โค้ด",

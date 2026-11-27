@@ -260,6 +260,26 @@ test('adds a cashier who signs in, changes their password, and is later deactiva
   await device.close()
 })
 
+test('shows a stock correction in the change history', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '15', quantity: '4' })
+  await page.getByRole('button', { name: `แก้ไข ${item.name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขสินค้า' })
+  await dialog.getByLabel('คงเหลือ').fill('9')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.getByRole('link', { name: 'ประวัติการแก้ไข' }).click()
+  // Newest first: the correction, then the creation of the item.
+  const rows = page.getByRole('row', { name: new RegExp(item.name) })
+  await expect(rows).toHaveCount(2)
+  await expect(rows.first().getByRole('listitem').filter({ hasText: 'คงเหลือ' })).toHaveText(
+    /คงเหลือ\s*4\s*9/,
+  )
+  await expect(rows.last().getByText('เพิ่ม', { exact: true })).toBeVisible()
+  await shot(page, '11-audit')
+})
+
 test('works in English, in dark mode and on a phone-sized screen', async ({ page }) => {
   await signIn(page)
   await page.getByRole('button', { name: 'Switch to English' }).click()

@@ -128,12 +128,98 @@ URL นี้คือกุญแจ ใครมีก็สั่ง redeploy
 - **เพิ่มหรือปิดบัญชีพนักงาน**: เจ้าของร้านทำเองได้ที่เมนู "ผู้ใช้งาน" บัญชีแรกของร้านยังมาจากตัวแปร `BOOTSTRAP_*`
 - **จำนวน proxy หน้า API**: ตั้ง `FORWARD_LIMIT` ให้ตรงกับจำนวน proxy จริง (nginx ของ stack นี้ 1 ชั้น บวก reverse proxy HTTPS ถ้ามี)
   ถ้าตั้งน้อยไป ผู้ใช้ทุกคนจะถูกนับเป็น IP เดียวกันและโดนจำกัดการ login พร้อมกัน ถ้าตั้งมากไป ผู้โจมตีปลอม IP ได้
-- **Rollback**: ใน Portainer แก้ตัวแปร `IMAGE_TAG` ของ stack เป็น tag เก่า (`sha-...`) แล้วกด **Pull and redeploy**
-  การ deploy ครั้งถัดไปจาก `main` จะเขียนทับค่านี้ ถ้าปัญหาอยู่ในโค้ดให้ revert commit ด้วย
-- **Rollback ไม่ย้อนฐานข้อมูล**: migration ที่รันไปแล้วไม่ถูกถอยกลับ ก่อน deploy ที่มี migration ให้สำรองข้อมูลก่อน
-- **สำรองฐานข้อมูล**: ข้อมูลอยู่ใน volume `postgres-data` ยังไม่มีระบบสำรองอัตโนมัติ ตัวอย่างคำสั่งสำรองเอง:
-  `docker exec <container ของ postgres> pg_dump -U postgres SenicPosDb > backup.sql`
+- **Rollback**: ดูหัวข้อ "Rollback" ด้านล่าง
+- **สำรองและกู้คืนฐานข้อมูล**: ดูหัวข้อ "สำรองและกู้คืนฐานข้อมูล" ด้านล่าง
 - **Log ของ API**: ดูใน Portainer ที่ container `api` ไฟล์ log เก็บใน volume `api-logs`
+
+## ตรวจ production หลัง deploy
+
+ตั้ง Variable `SMOKE_URL` (เช่น `https://pos.example.com`) ใน environment `production` แล้ว workflow จะรัน
+`deploy/smoke-test.mjs` โหมดอ่านอย่างเดียวหลัง deploy ทุกครั้ง ถ้าข้อใดไม่ผ่าน workflow จะ fail ให้เห็น
+
+ถ้าเพิ่ม Secret `SMOKE_TENANT_ID`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` ของบัญชี Owner หรือ Admin จะตรวจการ login
+และการอ่านข้อมูลด้วย แนะนำให้สร้างบัญชีแยกสำหรับงานนี้ ถ้าไม่ใส่จะตรวจเฉพาะส่วนที่ไม่ต้อง login
+workflow ไม่ rollback ให้เอง: เมื่อ fail ให้ทำตามหัวข้อ "Rollback"
+
+## สำรองและกู้คืนฐานข้อมูล
+
+Stack สำรองฐานข้อมูลเองสองแบบ เก็บใน volume `db-backups`:
+
+| ไฟล์                                     | เกิดเมื่อ                                          | เก็บไว้                               |
+| --------------------------------------- | ----------------------------------------------- | ----------------------------------- |
+| `predeploy-<เวลา UTC>-<IMAGE_TAG>.dump` | ทุกครั้งที่ deploy ก่อน API รุ่นใหม่จะ start และ migrate | 5 ไฟล์ล่าสุด (`BACKUP_KEEP_PREDEPLOY`) |
+| `scheduled-<เวลา UTC>.dump`             | ทุก 24 ชั่วโมง (`BACKUP_INTERVAL_HOURS`)           | 14 วัน (`BACKUP_KEEP_DAYS`)          |
+| `manual-*.dump`                         | สั่งเอง                                           | ไม่ถูกลบอัตโนมัติ                        |
+
+- ถ้าการสำรองก่อน deploy ล้มเหลว API รุ่นใหม่จะไม่ start (ไม่มีข้อมูลสำรอง ก็ไม่ migrate) ดูสาเหตุที่ log ของ container `backup-before-deploy`
+- Container `backup` เป็น unhealthy เมื่อไฟล์สำรองตามเวลาล่าสุดเกินกำหนดไปมากกว่า 2 ชั่วโมง
+- **ไฟล์สำรองอยู่บน server เดียวกับฐานข้อมูล** ถ้า server หรือดิสก์เสีย จะเสียทั้งคู่ ต้องคัดลอก volume `db-backups`
+  ไปเก็บที่อื่นเป็นประจำ (เช่น rclone ไป object storage หรือ rsync ไปอีกเครื่อง) ส่วนนี้ยังไม่ได้ทำให้อัตโนมัติ
+- เผื่อพื้นที่ดิสก์ประมาณ 20 เท่าของขนาดไฟล์ dump หนึ่งไฟล์
+
+สั่งสำรองเองและดูรายการไฟล์ (ใน Portainer ใช้ Console ของ container `backup` หรือใช้ `docker exec`):
+
+```bash
+docker exec <container backup> sh -c 'pg_dump -Fc -f /backups/manual-$(date -u +%Y%m%dT%H%M%SZ).dump'
+docker exec <container backup> ls -lh /backups
+# คัดลอกไฟล์ออกมาที่เครื่อง
+docker cp <container backup>:/backups/<ไฟล์>.dump .
+```
+
+### กู้คืน
+
+การกู้คืนแทนที่ข้อมูลปัจจุบันทั้งหมดด้วยข้อมูลในไฟล์ สิ่งที่เกิดหลังเวลาของไฟล์นั้นหายไป
+
+```bash
+# 1. หยุด API และเว็บ เพื่อไม่ให้มีใครเขียนข้อมูลระหว่างกู้คืน
+docker stop <container api> <container web>
+
+# 2. สำรองสภาพปัจจุบันไว้ก่อน เผื่อเลือกไฟล์ผิด
+docker exec <container backup> sh -c 'pg_dump -Fc -f /backups/manual-before-restore-$(date -u +%Y%m%dT%H%M%SZ).dump'
+
+# 3. สร้างฐานข้อมูลใหม่แล้วกู้คืน
+docker exec <container backup> sh -c 'dropdb --force SenicPosDb && createdb SenicPosDb && pg_restore --no-owner -d SenicPosDb /backups/<ไฟล์>.dump'
+
+# 4. Start กลับ (หรือกด redeploy ใน Portainer) แล้วรัน smoke test
+docker start <container api> <container web>
+```
+
+ต้องสร้างฐานข้อมูลใหม่ตามขั้นที่ 3 เสมอ อย่าใช้ `pg_restore --clean` ทับฐานเดิม: ตารางที่ migration รุ่นใหม่กว่าสร้างไว้
+จะค้างอยู่ และ API รุ่นใหม่จะ migrate ซ้ำไม่ได้ (พบจากการซ้อม)
+
+เมื่อ API start มันจะ migrate ฐานข้อมูลที่กู้คืนมาให้ตรงกับรุ่นของ image เอง จึงกู้ไฟล์จากรุ่นเก่ากว่าได้
+
+ซ้อมแล้วเมื่อ 27 พฤศจิกายน 2026 บน stack ในเครื่อง: กู้ไฟล์ `predeploy` ของรุ่นก่อนหน้า แล้ว start API รุ่นใหม่
+ระบบ migrate ต่อและ smoke test ผ่านครบ ฐานข้อมูลทดสอบมีข้อมูลน้อยมากจึงใช้เวลาไม่ถึงหนึ่งวินาที
+**ยังไม่รู้เวลาที่ใช้กับข้อมูลขนาดจริง** ให้ซ้อมอีกครั้งเมื่อมีข้อมูลจริงและจดเวลาไว้
+CI ซ้อมกู้คืนลงฐานข้อมูลเปล่าทุกครั้งที่รัน (job `stack`)
+
+## Rollback
+
+ใช้เมื่อรุ่นที่เพิ่ง deploy มีปัญหา
+
+1. ใน Portainer แก้ตัวแปร `IMAGE_TAG` ของ stack เป็น tag ของรุ่นก่อนหน้า (`sha-...` ดูได้จากประวัติของ workflow Deploy
+   หรือจากชื่อไฟล์ `predeploy-*`) แล้วกด **Pull and redeploy**
+2. เปิด `/health` ดูว่า `version` เป็นรุ่นเก่าแล้ว และรัน smoke test
+3. Revert commit ที่มีปัญหาใน `main` ด้วย ไม่เช่นนั้นการ deploy ครั้งถัดไปจะนำรุ่นที่มีปัญหากลับมา
+
+**Rollback ไม่ย้อนฐานข้อมูล** รุ่นเก่าจะทำงานกับฐานข้อมูลที่ถูก migrate ไปแล้ว ซึ่งใช้ได้ตราบที่ทำตามกติกาด้านล่าง
+ถ้ารุ่นใหม่ทำข้อมูลเสีย ให้กู้คืนจากไฟล์ `predeploy-*` ของการ deploy ครั้งนั้นตามหัวข้อ "กู้คืน"
+โดยยอมเสียข้อมูลที่เกิดหลังจากนั้น (บิลที่ขายระหว่างนั้นต้องบันทึกใหม่)
+
+ซ้อมแล้วเมื่อ 27 พฤศจิกายน 2026 บน stack ในเครื่อง: deploy รุ่นก่อนหน้า → อัปเกรดเป็นรุ่นที่มี migration ใหม่ →
+rollback ด้วย `IMAGE_TAG` รุ่นก่อนหน้าทำงานกับฐานข้อมูลที่ migrate แล้วได้ smoke test โหมดเต็มผ่านทุกข้อที่รุ่นนั้นมี
+ยังไม่ได้ซ้อมผ่าน Portainer จริง
+
+### กติกาของ migration
+
+Migration ทุกตัวต้องทำให้ **โค้ดรุ่นก่อนหน้าหนึ่งรุ่นยังทำงานได้กับฐานข้อมูลใหม่** เพื่อให้ rollback ได้โดยไม่ต้องกู้ข้อมูล
+
+- **ทำได้ในรุ่นเดียว:** เพิ่มตาราง, เพิ่มคอลัมน์ที่เป็น null ได้หรือมีค่าเริ่มต้น, เพิ่ม index
+- **ต้องแบ่งเป็นสองรุ่น:** ลบหรือเปลี่ยนชื่อคอลัมน์หรือตาราง, เปลี่ยนชนิดข้อมูล, เพิ่ม `NOT NULL` ให้คอลัมน์เดิม
+  รุ่นแรกให้โค้ดเลิกใช้ของเก่า (และเขียนทั้งของเก่าและใหม่ถ้าจำเป็น) รุ่นถัดไปจึงลบของเก่า
+- อย่าแก้ migration ที่ deploy ไปแล้ว ให้เพิ่มตัวใหม่เสมอ
+- Migration ที่แก้ข้อมูลจำนวนมากให้ทดสอบกับสำเนาของข้อมูลจริงก่อน เพราะ API จะไม่รับงานจนกว่า migration จะจบ
 
 ## Portainer ที่เข้าจากอินเทอร์เน็ตไม่ได้
 
