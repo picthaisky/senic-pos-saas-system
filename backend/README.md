@@ -208,6 +208,12 @@ into **Authorize**.
 | `Jwt__Key` | Signing key for access tokens, at least 32 characters. Required: the API refuses to start without it. |
 | `Cors__AllowedOrigins__0` | Origin of the frontend when it is served from a different origin than the API. |
 | `Business__TimeZone` | Time zone used for report days and date filters. Default `Asia/Bangkok`. |
+| `Push__PublicKey`, `Push__PrivateKey` | VAPID key pair for push notifications. Optional: without them push is off and everything else works. |
+| `Push__Subject` | Contact for the push services, e.g. `mailto:admin@your-domain`. Required with the keys. |
+
+Generate the VAPID key pair once with `npx web-push generate-vapid-keys` and keep it: changing it
+invalidates every existing subscription. In Development a temporary pair is generated on each start,
+so browsers have to subscribe again after a restart unless you set real keys.
 
 ### Docker Deployment
 

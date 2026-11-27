@@ -219,13 +219,35 @@ Hub ส่งข้อมูลทางเดียว client ไม่ต้�
 
 Vite dev server และ nginx ของ frontend ตั้ง proxy ให้ `/hubs` ไว้แล้ว
 
-### Web Push ⏳
+### Web Push ✅
 
-| Path                                                             | ใช้ทำอะไร                  |
-| ---------------------------------------------------------------- | ------------------------- |
-| `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions` | เก็บ Web Push subscription |
+แจ้งเตือนที่ไปถึงเครื่องแม้ปิดแอปอยู่ ตอนนี้ส่งเรื่องเดียวคือสินค้าถึงจุดสั่งซื้อ (เหตุการณ์เดียวกับ `LowStock`)
+ให้ผู้ใช้ role Admin และ Owner ของ tenant นั้น ทุก role ลงทะเบียนเครื่องได้ แต่ role อื่นยังไม่มีเรื่องที่ส่งให้
 
-ยังไม่ได้ทำ ต้องมี VAPID key ของระบบ และทดสอบได้เฉพาะในเบราว์เซอร์จริงผ่าน HTTPS
+| Method | Path                      | คำอธิบาย                                                           |
+| ------ | ------------------------- | ----------------------------------------------------------------- |
+| GET    | `/api/push/public-key`    | VAPID public key สำหรับ subscribe คืน `404` ถ้า server ไม่ได้ตั้งค่า push |
+| POST   | `/api/push/subscriptions` | ลงทะเบียนเบราว์เซอร์นี้ให้ผู้ใช้ปัจจุบัน คืน `204`                             |
+| DELETE | `/api/push/subscriptions` | ยกเลิก (ส่ง `endpoint` ใน body) คืน `204` เสมอ                       |
+
+```jsonc
+// POST /api/push/subscriptions  (ค่าจาก PushSubscription.toJSON() ของเบราว์เซอร์ + ภาษา)
+{
+  "endpoint": "https://fcm.googleapis.com/fcm/send/...",
+  "keys": { "p256dh": "...", "auth": "..." },
+  "language": "th"               // th | en ใช้เขียนข้อความแจ้งเตือน
+}
+
+// ข้อมูลที่ service worker ได้รับ
+{ "title": "สินค้าใกล้หมด", "body": "... เหลือ 4 (จุดสั่งซื้อ 5)", "tag": "low-stock-<itemId>", "url": "/inventory" }
+```
+
+- `endpoint` ต้องเป็น `https` และอยู่ใน host ของ push service ที่อนุญาต (`Push:AllowedHosts`) ไม่เช่นนั้นคืน `400`
+  เพราะ server จะส่ง request ไปยัง URL นี้ จึงต้องกันไม่ให้ชี้ไปที่อื่น
+- เบราว์เซอร์หนึ่งตัวมี subscription เดียว ถ้าผู้ใช้อีกคนลงทะเบียนเครื่องเดิม เครื่องนั้นจะเป็นของคนล่าสุด
+- Frontend ยกเลิก subscription ให้เองเมื่อออกจากระบบ
+- Subscription ที่ push service แจ้งว่าไม่มีแล้ว (`404`/`410`) จะถูกลบอัตโนมัติ
+- การส่งทำในคิวเบื้องหลังของ API การขายจึงไม่ต้องรอ ถ้า API หยุดทำงาน รายการที่ค้างในคิวจะหายไป
 
 ## 9. รายละเอียดที่ควรรู้
 
@@ -241,6 +263,7 @@ Vite dev server และ nginx ของ frontend ตั้ง proxy ให้ 
 - **`PUT`** ทั้งของ inventory และ customers ข้าม field ที่ส่งเป็น `null` จึงยังล้างค่า field ให้ว่างไม่ได้
 - **`Jwt:Key`** ต้องตั้งเองนอก Development (เช่น environment variable `Jwt__Key`) ไม่เช่นนั้น API จะไม่ start
 - **`Cors:AllowedOrigins`** ต้องใส่ origin ของ frontend เมื่อ frontend กับ API อยู่คนละ origin
+- **`Push:PublicKey`, `Push:PrivateKey`, `Push:Subject`** ต้องตั้งเองนอก Development จึงจะใช้ push ได้ ถ้าไม่ตั้ง ระบบส่วนอื่นทำงานปกติและปุ่มแจ้งเตือนจะไม่แสดง
 
 ## 10. เรื่องที่ยังเปิดอยู่
 

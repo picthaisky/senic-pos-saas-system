@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.API.Push;
 using SenicPosSaaS.Application.Interfaces;
 
 namespace SenicPosSaaS.API.Realtime;
@@ -47,22 +48,31 @@ public class NotificationsHub : Hub
         roles.Split(',').Any(user.IsInRole);
 }
 
-public class SignalRNotifier : IRealtimeNotifier
+/// <summary>
+/// Announces events to people using the app right now (SignalR) and, for stock alerts, also to
+/// subscribed devices whose app may be closed (Web Push, sent by a background worker).
+/// </summary>
+public class RealtimeNotifier : IRealtimeNotifier
 {
     private readonly IHubContext<NotificationsHub> _hub;
-    private readonly ILogger<SignalRNotifier> _logger;
+    private readonly PushQueue _pushQueue;
+    private readonly ILogger<RealtimeNotifier> _logger;
 
-    public SignalRNotifier(IHubContext<NotificationsHub> hub, ILogger<SignalRNotifier> logger)
+    public RealtimeNotifier(IHubContext<NotificationsHub> hub, PushQueue pushQueue, ILogger<RealtimeNotifier> logger)
     {
         _hub = hub;
+        _pushQueue = pushQueue;
         _logger = logger;
     }
 
     public Task OrderCreatedAsync(Guid tenantId, OrderCreatedEvent order, CancellationToken cancellationToken = default) =>
         SendAsync(NotificationsHub.ReportingGroup(tenantId), NotificationsHub.OrderCreated, order, cancellationToken);
 
-    public Task LowStockAsync(Guid tenantId, LowStockEvent item, CancellationToken cancellationToken = default) =>
-        SendAsync(NotificationsHub.ManagersGroup(tenantId), NotificationsHub.LowStock, item, cancellationToken);
+    public Task LowStockAsync(Guid tenantId, LowStockEvent item, CancellationToken cancellationToken = default)
+    {
+        _pushQueue.Enqueue(new LowStockPush(tenantId, item));
+        return SendAsync(NotificationsHub.ManagersGroup(tenantId), NotificationsHub.LowStock, item, cancellationToken);
+    }
 
     private async Task SendAsync(string group, string method, object payload, CancellationToken cancellationToken)
     {

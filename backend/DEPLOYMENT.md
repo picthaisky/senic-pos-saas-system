@@ -187,6 +187,11 @@ kubectl create secret generic senicpos-jwt-secret -n senicpos \
 
 Changing this key signs every user out, so keep the same value across deployments.
 
+Push notifications are optional. To turn them on, generate a VAPID key pair once
+(`npx web-push generate-vapid-keys`) and add `Push__PublicKey`, `Push__PrivateKey` and
+`Push__Subject` (e.g. `mailto:admin@your-domain`) to the API container the same way, with the
+private key in a secret. Push also requires the site to be served over HTTPS.
+
 ### Step 4: Deploy PostgreSQL
 
 ```bash

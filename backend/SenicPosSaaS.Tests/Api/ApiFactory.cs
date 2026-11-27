@@ -34,6 +34,9 @@ public class ApiFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"api-tests-{Guid.NewGuid()}";
     private bool _seeded;
 
+    /// <summary>Stands in for the Web Push sender: records what would have been sent.</summary>
+    public FakePushSender Push { get; } = new();
+
     public ApiFactory()
     {
         // The refresh cookie is Secure outside Development, so the test client must use https.
@@ -56,6 +59,11 @@ public class ApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
 
             services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+
+            // Record push notifications instead of calling real push services.
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IPushSender)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton<IPushSender>(Push);
         });
     }
 

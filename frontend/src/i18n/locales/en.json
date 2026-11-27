@@ -207,5 +207,12 @@
   },
   "realtime": {
     "lowStock": "{{name}} is running low: {{quantity}} left"
+  },
+  "push": {
+    "turnOn": "Turn on notifications on this device",
+    "turnOff": "Turn off notifications on this device",
+    "enabled": "Notifications are on. This device will be told when stock runs low.",
+    "disabled": "Notifications are off on this device",
+    "blocked": "The browser is blocking notifications for this site. Allow them in the browser settings."
   }
 }

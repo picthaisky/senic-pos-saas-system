@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           navigateFallbackDenylist: [/^\/api\//, /^\/hubs\//],
+          // Adds the push and notification-click handlers (public/push-sw.js).
+          importScripts: ['push-sw.js'],
         },
       }),
     ],

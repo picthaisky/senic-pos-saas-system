@@ -2,9 +2,11 @@ import { Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { InstallAppButton } from '@/components/PwaPrompt'
+import { PushToggle } from '@/components/PushToggle'
 import { Button } from '@/components/ui'
 import { authApi } from '@/features/auth/api'
 import { OfflineQueueButton } from '@/features/pos/components/OfflineQueue'
+import { disablePush } from '@/lib/push'
 import { useAuthStore } from '@/stores/auth'
 import { useNetworkStore } from '@/stores/network'
 import { useThemeStore } from '@/stores/theme'
@@ -19,6 +21,9 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
 
   async function handleLogout() {
     setLoggingOut(true)
+    // While the access token still works: stop this browser receiving this user's alerts,
+    // so the next person to use the device does not get them.
+    await disablePush().catch(() => {})
     try {
       await authApi.logout()
     } catch {
@@ -54,6 +59,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
       )}
       <OfflineQueueButton />
       <InstallAppButton />
+      <PushToggle />
 
       <Button
         variant="ghost"

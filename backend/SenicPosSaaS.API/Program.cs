@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.API.Push;
 using SenicPosSaaS.API.Realtime;
 using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Application.Services;
@@ -120,7 +121,14 @@ builder.Services.AddAuthorization();
 builder.Services
     .AddSignalR()
     .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotifier>();
+builder.Services.AddSingleton<IRealtimeNotifier, RealtimeNotifier>();
+
+// Web Push: notifications that reach a device even when the app is closed. Disabled unless
+// VAPID keys are configured (a temporary pair is generated in Development).
+builder.Services.AddOptions<PushOptions>().BindConfiguration(PushOptions.SectionName);
+builder.Services.AddSingleton<IPushSender, WebPushSender>();
+builder.Services.AddSingleton<PushQueue>();
+builder.Services.AddHostedService<PushDispatcher>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
@@ -137,6 +145,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IInventoryItemRepository, InventoryItemRepository>();
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -145,6 +154,7 @@ builder.Services.AddScoped<IInventoryItemService, InventoryItemService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 
 // CORS: only the origins listed in Cors:AllowedOrigins, with credentials so the browser sends
 // the refresh-token cookie. An empty list allows no cross-origin calls (same-origin still works).

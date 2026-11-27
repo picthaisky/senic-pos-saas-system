@@ -69,6 +69,10 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 - **Real-time**: เมื่อ login กับ backend จริง แอปจะต่อ SignalR ที่ `/hubs/notifications`
   การขายใหม่ทำให้ตัวเลขในหน้า Dashboard และ Inventory อัปเดตเอง และมีข้อความแจ้งเมื่อสินค้าถึงจุดสั่งซื้อ
   (เฉพาะ Admin และ Owner) โค้ดอยู่ที่ `src/app/realtime.ts` โหมด mock ไม่มี hub จึงไม่ทำงานในโหมดนั้น
+- **Push notification**: Admin และ Owner จะเห็นปุ่มกระดิ่งบนแถบด้านบน กดเพื่อให้เครื่องนี้ได้รับแจ้งเมื่อสินค้าถึงจุดสั่งซื้อ
+  แม้ปิดแอปอยู่ แอปยกเลิกให้เองเมื่อออกจากระบบ ปุ่มจะแสดงเฉพาะเมื่อใช้ได้จริง คือ build แบบ production
+  (`npm run build && npm run preview` เพราะต้องมี service worker), เปิดผ่าน HTTPS หรือ localhost,
+  และ backend ตั้งค่า push ไว้ โค้ดอยู่ที่ `src/lib/push.ts` และ `public/push-sw.js`
 - **ส่งออก CSV**: ปุ่ม "ส่งออก CSV" ในหน้า Inventory (ทุกแถวที่ตรงกับตัวกรอง ไม่ใช่เฉพาะหน้าที่เห็น) และหน้า Customers
   ไฟล์เปิดใน Excel ได้โดยตรงและอ่านภาษาไทยถูกต้อง โค้ดอยู่ที่ `src/lib/export-csv.ts`
 
