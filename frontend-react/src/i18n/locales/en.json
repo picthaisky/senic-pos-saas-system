@@ -1,0 +1,50 @@
+{
+  "app": {
+    "name": "Senic POS",
+    "tagline": "Point of sale for multi-branch stores"
+  },
+  "common": {
+    "loading": "Loading…",
+    "close": "Close",
+    "noData": "No data",
+    "error": "Something went wrong. Please try again.",
+    "comingSoon": "This page is being migrated from the previous system"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "pos": "Point of sale",
+    "inventory": "Inventory",
+    "customers": "Customers",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "topbar": {
+    "switchToDark": "Switch to dark mode",
+    "switchToLight": "Switch to light mode",
+    "switchLanguage": "เปลี่ยนเป็นภาษาไทย",
+    "logout": "Sign out"
+  },
+  "roles": {
+    "Admin": "Administrator",
+    "Owner": "Owner",
+    "Cashier": "Cashier",
+    "Viewer": "Viewer"
+  },
+  "auth": {
+    "title": "Sign in",
+    "tenantId": "Tenant ID",
+    "email": "Email",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "submit": "Sign in",
+    "invalidCredentials": "Incorrect tenant ID, email or password",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "mockHint": "Mock mode: any email and password (6+ characters) works. Start the email with admin@, cashier@ or viewer@ to try each role."
+  },
+  "forbidden": {
+    "title": "Access denied",
+    "message": "Your account is not allowed to use this page",
+    "back": "Back to dashboard"
+  }
+}

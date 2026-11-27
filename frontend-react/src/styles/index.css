@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/* Dark mode is driven by data-theme on <html> so the theme store can switch it at runtime. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Semantic tokens: components use bg-surface / text-fg / bg-primary instead of raw palette
+   colours, so a tenant theme only has to override these variables. */
+:root {
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-border: #e2e8f0;
+  --app-fg: #0f172a;
+  --app-muted: #64748b;
+  --app-primary: #2563eb;
+  --app-primary-fg: #ffffff;
+  --app-danger: #dc2626;
+  --app-success: #16a34a;
+  --app-warning: #d97706;
+}
+
+[data-theme='dark'] {
+  --app-bg: #0b1120;
+  --app-surface: #111827;
+  --app-border: #1f2937;
+  --app-fg: #f1f5f9;
+  --app-muted: #94a3b8;
+  --app-primary: #3b82f6;
+  --app-primary-fg: #ffffff;
+  --app-danger: #f87171;
+  --app-success: #4ade80;
+  --app-warning: #fbbf24;
+}
+
+@theme inline {
+  --color-bg: var(--app-bg);
+  --color-surface: var(--app-surface);
+  --color-border: var(--app-border);
+  --color-fg: var(--app-fg);
+  --color-muted: var(--app-muted);
+  --color-primary: var(--app-primary);
+  --color-primary-fg: var(--app-primary-fg);
+  --color-danger: var(--app-danger);
+  --color-success: var(--app-success);
+  --color-warning: var(--app-warning);
+  --font-sans: 'Sarabun', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+  }
+}
