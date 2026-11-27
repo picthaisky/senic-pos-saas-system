@@ -41,6 +41,13 @@ services:
       # Signing key for access tokens, at least 32 characters. Changing it signs everyone out.
       Jwt__Key: ${JWT_KEY:?Set JWT_KEY (32+ random characters) in the stack environment variables}
       Business__TimeZone: ${BUSINESS_TIMEZONE:-Asia/Bangkok}
+      # The API is only reachable through nginx on the private Docker network, so forwarded
+      # client addresses are trusted from private ranges. FORWARD_LIMIT is the number of proxies
+      # in front of the API: nginx plus your HTTPS reverse proxy = 2.
+      ForwardedHeaders__TrustedNetworks__0: 10.0.0.0/8
+      ForwardedHeaders__TrustedNetworks__1: 172.16.0.0/12
+      ForwardedHeaders__TrustedNetworks__2: 192.168.0.0/16
+      ForwardedHeaders__ForwardLimit: ${FORWARD_LIMIT:-2}
       # First user of a new installation. Used once; see deploy/README.md.
       Bootstrap__TenantId: ${BOOTSTRAP_TENANT_ID:-}
       Bootstrap__OwnerEmail: ${BOOTSTRAP_OWNER_EMAIL:-}

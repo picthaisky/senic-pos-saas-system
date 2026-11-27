@@ -15,8 +15,7 @@ namespace SenicPosSaaS.Tests.Api;
 public class PostgresApiFactory : ApiFactory, IAsyncLifetime
 {
     /// <summary>Same major version as deploy/docker-compose.yml.</summary>
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .Build();
 
     protected override void ConfigureDatabase(DbContextOptionsBuilder options) =>

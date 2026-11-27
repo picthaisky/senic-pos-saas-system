@@ -48,6 +48,8 @@ public class ApiFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("Jwt:Key", "integration-test-signing-key-0123456789abcdef");
+        builder.UseSetting("LoginProtection:RequestsPerMinutePerIp", "100000");
+        ConfigureSettings(builder);
 
         builder.ConfigureServices(services =>
         {
@@ -66,6 +68,11 @@ public class ApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
             services.AddSingleton<IPushSender>(Push);
         });
+    }
+
+    /// <summary>Extra configuration for a specialised factory.</summary>
+    protected virtual void ConfigureSettings(IWebHostBuilder builder)
+    {
     }
 
     /// <summary>

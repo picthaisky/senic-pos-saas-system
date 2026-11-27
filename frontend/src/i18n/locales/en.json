@@ -24,7 +24,10 @@
     "integer": "Enter a whole number",
     "nonNegative": "Must be 0 or more",
     "email": "Enter a valid email address",
-    "phone": "Phone number must be 10 digits"
+    "phone": "Phone number must be 10 digits",
+    "passwordMin": "Password must be at least 8 characters",
+    "passwordMax": "Password must be at most 128 characters",
+    "passwordMismatch": "The two passwords do not match"
   },
   "pagination": {
     "rowsPerPage": "Rows per page",
@@ -37,6 +40,7 @@
     "pos": "Point of sale",
     "inventory": "Inventory",
     "customers": "Customers",
+    "users": "Users",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
   },
@@ -62,7 +66,8 @@
     "submit": "Sign in",
     "invalidCredentials": "Incorrect tenant ID, email or password",
     "passwordTooShort": "Password must be at least 6 characters",
-    "mockHint": "Mock mode: any email and password (6+ characters) works. Start the email with admin@, cashier@ or viewer@ to try each role."
+    "mockHint": "Mock mode: any email and password (6+ characters) works. Start the email with admin@, cashier@ or viewer@ to try each role.",
+    "tooManyAttempts": "Too many sign-in attempts. Please wait a while and try again."
   },
   "forbidden": {
     "title": "Access denied",
@@ -140,6 +145,47 @@
     "notEnoughPoints": "Not enough points",
     "history": "Points history",
     "noHistory": "No transactions yet"
+  },
+  "users": {
+    "list": "Users",
+    "addUser": "Add user",
+    "editUser": "Edit user",
+    "editNamed": "Edit {{name}}",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Deactivated",
+    "you": "You",
+    "roleHint": "Owners and administrators manage everything. Cashiers can only sell. Viewers can only see reports.",
+    "ownRoleHint": "You cannot change your own role. Another manager has to do it.",
+    "initialPassword": "Initial password",
+    "initialPasswordHint": "At least 8 characters. Ask the user to change it after their first sign-in.",
+    "saved": "User saved",
+    "emailTaken": "A user with this email already exists",
+    "lastOwner": "Not possible: the shop must keep at least one active owner",
+    "resetPassword": "Set a new password",
+    "resetPasswordNamed": "Set a new password for {{name}}",
+    "resetPasswordHelp": "Set a new password for {{name}}. They will be signed out on every device.",
+    "newPassword": "New password",
+    "passwordReset": "New password set for {{name}}",
+    "deactivate": "Deactivate",
+    "deactivateNamed": "Deactivate {{name}}",
+    "deactivateConfirm": "Deactivate {{name}}? They are signed out at once and cannot sign in until reactivated.",
+    "deactivated": "{{name}} deactivated",
+    "activate": "Reactivate",
+    "activateNamed": "Reactivate {{name}}",
+    "activated": "{{name}} reactivated"
+  },
+  "account": {
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "otherDevicesHint": "At least 8 characters. Other devices signed in to this account will be signed out.",
+    "passwordChanged": "Password changed",
+    "wrongCurrentPassword": "The current password is incorrect"
   },
   "pos": {
     "scanBarcode": "Scan barcode",

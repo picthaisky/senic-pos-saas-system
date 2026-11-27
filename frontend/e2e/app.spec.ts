@@ -187,6 +187,79 @@ test('updates another open window when a sale happens', async ({ page, context }
   await shot(watcher, '07-realtime-dashboard')
 })
 
+test('adds a cashier who signs in, changes their password, and is later deactivated', async ({
+  page,
+  browser,
+}) => {
+  const id = `${Date.now()}`.slice(-8)
+  const staff = { name: `พนักงาน E2E ${id}`, email: `e2e-${id}@e2e.test` }
+  const firstPassword = `First-${id}-pass`
+  const ownPassword = `Own-${id}-pass`
+
+  await signIn(page)
+  await page.getByRole('link', { name: 'ผู้ใช้งาน' }).click()
+  await page.getByRole('button', { name: 'เพิ่มผู้ใช้' }).click()
+  const form = page.getByRole('dialog', { name: 'เพิ่มผู้ใช้' })
+  await form.getByLabel('ชื่อ', { exact: true }).fill(staff.name)
+  await form.getByLabel('อีเมล').fill(staff.email)
+  await form.getByLabel('สิทธิ์').selectOption('Cashier')
+  await form.getByLabel('รหัสผ่านเริ่มต้น').fill(firstPassword)
+  await form.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกผู้ใช้แล้ว')).toBeVisible()
+  const row = page.getByRole('row', { name: new RegExp(staff.name) })
+  await expect(row.getByText('แคชเชียร์')).toBeVisible()
+  await shot(page, '10-users')
+
+  // The cashier, on their own device.
+  const device = await browser.newContext({ locale: 'th-TH' })
+  const till = await device.newPage()
+  const signInAsStaff = async (password: string) => {
+    await till.goto('/')
+    await till.getByLabel('รหัสร้าน (Tenant ID)').fill(account.tenantId)
+    await till.getByLabel('อีเมล').fill(staff.email)
+    await till.getByLabel('รหัสผ่าน', { exact: true }).fill(password)
+    await till.getByRole('button', { name: 'เข้าสู่ระบบ' }).click()
+  }
+  await signInAsStaff(firstPassword)
+  // A cashier starts at the till and is not offered the management pages.
+  await expect(till.getByRole('heading', { name: 'ขายหน้าร้าน', level: 1 })).toBeVisible()
+  await expect(till.getByRole('link', { name: 'ผู้ใช้งาน' })).toHaveCount(0)
+
+  await till.getByRole('button', { name: 'เปลี่ยนรหัสผ่าน' }).click()
+  const change = till.getByRole('dialog', { name: 'เปลี่ยนรหัสผ่าน' })
+  await change.getByLabel('รหัสผ่านปัจจุบัน').fill('not-the-password')
+  await change.getByLabel('รหัสผ่านใหม่', { exact: true }).fill(ownPassword)
+  await change.getByLabel('ยืนยันรหัสผ่านใหม่').fill(ownPassword)
+  await change.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(change.getByText('รหัสผ่านปัจจุบันไม่ถูกต้อง')).toBeVisible()
+  await change.getByLabel('รหัสผ่านปัจจุบัน').fill(firstPassword)
+  await change.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(till.getByText('เปลี่ยนรหัสผ่านแล้ว')).toBeVisible()
+
+  // Still signed in on this device after the change, and the new password works.
+  await till.reload()
+  await expect(till.getByRole('heading', { name: 'ขายหน้าร้าน', level: 1 })).toBeVisible()
+  await till.getByRole('button', { name: 'ออกจากระบบ' }).click()
+  // Wait for the sign-out to finish; navigating away earlier would cancel it.
+  await expect(till.getByRole('form', { name: 'เข้าสู่ระบบ' })).toBeVisible()
+  await signInAsStaff(ownPassword)
+  await expect(till.getByRole('heading', { name: 'ขายหน้าร้าน', level: 1 })).toBeVisible()
+
+  // The owner deactivates them: their open session ends and they cannot come back.
+  await row.getByRole('button', { name: `ปิดการใช้งาน ${staff.name}` }).click()
+  await page
+    .getByRole('dialog', { name: 'ปิดการใช้งาน' })
+    .getByRole('button', { name: 'ปิดการใช้งาน' })
+    .click()
+  await expect(row.getByText('ปิดการใช้งาน', { exact: true })).toBeVisible()
+
+  await till.reload()
+  await expect(till.getByRole('form', { name: 'เข้าสู่ระบบ' })).toBeVisible()
+  await signInAsStaff(ownPassword)
+  await expect(till.getByText('รหัสร้าน อีเมล หรือรหัสผ่านไม่ถูกต้อง')).toBeVisible()
+  await device.close()
+})
+
 test('works in English, in dark mode and on a phone-sized screen', async ({ page }) => {
   await signIn(page)
   await page.getByRole('button', { name: 'Switch to English' }).click()

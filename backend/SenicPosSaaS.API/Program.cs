@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -19,11 +22,10 @@ using SenicPosSaaS.Infrastructure.Repositories;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
+// Sinks (console and a daily file) are defined in appsettings.json under "Serilog".
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .WriteTo.File("logs/senicpos-.log", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -108,6 +110,38 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
+// Protection against password guessing: a per-account lockout (LoginAttemptLimiter) and a
+// per-address ceiling on the sign-in and refresh endpoints.
+builder.Services.AddOptions<LoginProtectionOptions>().BindConfiguration(LoginProtectionOptions.SectionName);
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<LoginAttemptLimiter>();
+builder.Services.AddRateLimiter(limiter =>
+{
+    limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    limiter.AddPolicy(LoginProtectionOptions.RateLimitPolicy, context =>
+    {
+        var perMinute = context.RequestServices.GetRequiredService<IOptions<LoginProtectionOptions>>().Value.RequestsPerMinutePerIp;
+        return RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1) });
+    });
+});
+
+// Behind a reverse proxy the client address and scheme arrive in X-Forwarded-* headers. They
+// are only believed when the request comes from a network listed in
+// ForwardedHeaders:TrustedNetworks (CIDR), otherwise anyone could fake their address.
+// ForwardedHeaders:ForwardLimit is the number of proxies in front of the API.
+builder.Services
+    .AddOptions<ForwardedHeadersOptions>()
+    .Configure<IConfiguration>((forwarded, configuration) =>
+    {
+        forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        forwarded.ForwardLimit = configuration.GetValue("ForwardedHeaders:ForwardLimit", 1);
+        foreach (var network in configuration.GetSection("ForwardedHeaders:TrustedNetworks").Get<string[]>() ?? [])
+            forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+    });
+
 // Live notifications (new sales, low stock). Payload enums travel as names, like the REST API.
 builder.Services
     .AddSignalR()
@@ -120,6 +154,7 @@ builder.Services.AddOptions<PushOptions>().BindConfiguration(PushOptions.Section
 builder.Services.AddSingleton<IPushSender, WebPushSender>();
 builder.Services.AddSingleton<PushQueue>();
 builder.Services.AddHostedService<PushDispatcher>();
+builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
@@ -140,6 +175,7 @@ builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionReposito
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IInventoryItemService, InventoryItemService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
@@ -165,6 +201,9 @@ builder.Services
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
+// First, so everything after it sees the real client address and scheme.
+app.UseForwardedHeaders();
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -204,6 +243,8 @@ app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
 
 app.UseCors();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

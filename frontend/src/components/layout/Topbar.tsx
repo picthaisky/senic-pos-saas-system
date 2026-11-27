@@ -1,10 +1,11 @@
-import { Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
+import { KeyRound, Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { InstallAppButton } from '@/components/PwaPrompt'
 import { PushToggle } from '@/components/PushToggle'
 import { Button } from '@/components/ui'
 import { authApi } from '@/features/auth/api'
+import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal'
 import { OfflineQueueButton } from '@/features/pos/components/OfflineQueue'
 import { disablePush } from '@/lib/push'
 import { useAuthStore } from '@/stores/auth'
@@ -18,6 +19,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const clearSession = useAuthStore((state) => state.clearSession)
   const online = useNetworkStore((state) => state.online)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -85,6 +87,18 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
 
       <Button
         variant="ghost"
+        size="icon"
+        aria-label={t('account.changePassword')}
+        title={t('account.changePassword')}
+        // Needs the server, so it is not offered while offline.
+        disabled={!online}
+        onClick={() => setChangingPassword(true)}
+      >
+        <KeyRound className="size-5" />
+      </Button>
+
+      <Button
+        variant="ghost"
         size="sm"
         className="h-10"
         loading={loggingOut}
@@ -94,6 +108,8 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         {/* Icon-only on small screens; the label stays available to screen readers. */}
         <span className="sr-only sm:not-sr-only">{t('topbar.logout')}</span>
       </Button>
+
+      {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
     </header>
   )
 }

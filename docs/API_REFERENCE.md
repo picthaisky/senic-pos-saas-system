@@ -20,18 +20,20 @@ Backend ทำตาม contract นี้ครบแล้ว และมี 
 | CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                     | ✅            |
 
 Status code ที่ frontend จัดการ: `400` (validation, แสดงใต้ field จาก `errors`), `401` (ลอง refresh 1 ครั้ง
-ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ)
+ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ),
+`429` (login ถี่หรือผิดหลายครั้งเกินไป มี header `Retry-After` เป็นวินาที)
 
 ## 2. Authentication
 
 Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 
-| Method | Path                | คำอธิบาย             |
-| ------ | ------------------- | ------------------- |
-| POST   | `/api/auth/login`   | เข้าสู่ระบบ            |
-| POST   | `/api/auth/refresh` | ขอ access token ใหม่ |
-| POST   | `/api/auth/logout`  | ยกเลิก refresh token |
-| GET    | `/api/auth/me`      | ข้อมูลผู้ใช้ปัจจุบัน        |
+| Method | Path                        | คำอธิบาย                |
+| ------ | --------------------------- | ---------------------- |
+| POST   | `/api/auth/login`           | เข้าสู่ระบบ               |
+| POST   | `/api/auth/refresh`         | ขอ access token ใหม่    |
+| POST   | `/api/auth/logout`          | ยกเลิก refresh token    |
+| GET    | `/api/auth/me`              | ข้อมูลผู้ใช้ปัจจุบัน           |
+| POST   | `/api/auth/change-password` | ผู้ใช้เปลี่ยนรหัสผ่านของตัวเอง |
 
 ```jsonc
 // POST /api/auth/login  request
@@ -48,6 +50,55 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 - Access token อายุ 15 นาที มี claim `sub`, `tenantId`, `role` frontend เก็บไว้ใน memory เท่านั้น
 - Refresh token อายุ 7 วัน ส่งเป็น cookie `HttpOnly; Secure; SameSite=Strict; Path=/api/auth`
   และหมุน (rotate) ทุกครั้งที่เรียก `/refresh` frontend ไม่เห็นค่า token นี้
+- Token ที่หมดอายุหรือถูกยกเลิกเกิน 7 วันถูกลบโดยงานเบื้องหลังวันละครั้ง
+
+### การป้องกันการเดารหัสผ่าน ✅
+
+- **ล็อกบัญชีชั่วคราว:** ใส่รหัสผ่านผิด 5 ครั้งติดกัน บัญชีนั้น (ร้าน + อีเมล) ถูกล็อก 15 นาที ระหว่างนั้น
+  `/login` ตอบ `429` พร้อม `Retry-After` แม้รหัสผ่านจะถูก การ login สำเร็จล้างตัวนับ
+- **จำกัดความถี่ต่อ IP:** `/login`, `/refresh` และ `/change-password` รับได้ 60 ครั้งต่อนาทีต่อ IP เกินแล้วตอบ `429`
+- ค่าทั้งหมดตั้งได้ที่ section `LoginProtection` (`MaxFailedAttempts`, `LockoutMinutes`, `RequestsPerMinutePerIp`)
+- ตัวนับอยู่ใน memory ของ API: หายเมื่อ restart และไม่แชร์ข้าม instance (ปัจจุบันรัน instance เดียว)
+- หลัง reverse proxy API อ่าน IP จริงจาก `X-Forwarded-For` เฉพาะที่มาจากเครือข่ายที่ไว้ใจ
+  (`ForwardedHeaders:TrustedNetworks`, `ForwardedHeaders:ForwardLimit`) ถ้าตั้งจำนวน proxy ผิด ทุกคนจะถูกนับเป็น IP เดียวกัน
+
+### เปลี่ยนรหัสผ่านของตัวเอง ✅
+
+```jsonc
+// POST /api/auth/change-password  (ทุก role)  → 204
+{ "currentPassword": "...", "newPassword": "อย่างน้อย 8 ตัวอักษร ไม่เกิน 128" }
+```
+
+- รหัสผ่านปัจจุบันผิดได้ `400` พร้อม `errors.CurrentPassword` (ไม่ใช่ `401` เพราะ session ยังใช้ได้)
+- สำเร็จแล้วอุปกรณ์อื่นของบัญชีนี้ถูกออกจากระบบ อุปกรณ์ที่สั่งเปลี่ยนยังใช้ต่อได้
+
+### จัดการผู้ใช้ของร้าน ✅
+
+เฉพาะ `Admin` และ `Owner` และเห็นเฉพาะผู้ใช้ของร้านตัวเอง
+
+| Method | Path                             | คำอธิบาย                                             |
+| ------ | -------------------------------- | --------------------------------------------------- |
+| GET    | `/api/users`                     | รายชื่อผู้ใช้ (ที่ใช้งานอยู่ขึ้นก่อน เรียงตามชื่อ)                  |
+| POST   | `/api/users`                     | เพิ่มผู้ใช้ → `201`, อีเมลซ้ำในร้านเดียวกัน → `409`           |
+| PUT    | `/api/users/{id}`                | แก้ชื่อ บทบาท หรือเปิด/ปิดการใช้งาน ส่งเฉพาะ field ที่จะเปลี่ยน |
+| POST   | `/api/users/{id}/reset-password` | ตั้งรหัสผ่านใหม่ให้ผู้ใช้ที่ลืม → `204`                         |
+
+```jsonc
+// POST /api/users
+{ "email": "cashier@shop.com", "name": "สมหญิง", "role": "Cashier", "password": "อย่างน้อย 8 ตัวอักษร" }
+
+// PUT /api/users/{id}  (ทุก field ไม่บังคับ)
+{ "name": "สมหญิง รักงาน", "role": "Viewer", "isActive": false }
+
+// ผู้ใช้ในคำตอบ
+{ "id": "guid", "email": "...", "name": "...", "role": "Cashier", "isActive": true, "createdAt": "..." }
+```
+
+- อีเมลถูกเก็บเป็นตัวพิมพ์เล็ก และแก้ไม่ได้หลังสร้าง
+- ปิดการใช้งาน หรือ reset รหัสผ่าน จะยกเลิก refresh token ทั้งหมดของผู้ใช้นั้นทันที
+  access token ที่ออกไปแล้วยังใช้ได้จนหมดอายุ (ไม่เกิน 15 นาที)
+- `409` เมื่อผู้จัดการพยายามเปลี่ยนบทบาทหรือปิดบัญชีของตัวเอง และเมื่อการแก้จะทำให้ร้านไม่เหลือ `Owner` ที่ใช้งานอยู่
+- ยังไม่มีการลบผู้ใช้ ใช้การปิดการใช้งานแทน เพื่อให้บิลเก่ายังอ้างถึงผู้ขายได้
 
 ## 3. Inventory
 
@@ -182,13 +233,14 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 ## 7. Subscriptions และ Health
 
-| Method | Path                               | Role                | สถานะ                   |
-| ------ | ---------------------------------- | ------------------- | ----------------------- |
-| GET    | `/api/subscriptions/current`       | Admin, Owner        | ✅                      |
-| POST   | `/api/subscriptions/current/renew` | Owner               | ✅                      |
-| POST   | `/api/subscriptions`               | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้ |
-| GET    | `/api/subscriptions/expiring`      | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้ |
-| GET    | `/health`                          | ไม่ต้อง login         | ✅                      |
+| Method | Path                               | Role                | สถานะ                                             |
+| ------ | ---------------------------------- | ------------------- | ------------------------------------------------- |
+| GET    | `/api/subscriptions/current`       | Admin, Owner        | ✅                                                |
+| POST   | `/api/subscriptions/current/renew` | Owner               | ✅                                                |
+| POST   | `/api/subscriptions`               | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้                           |
+| GET    | `/api/subscriptions/expiring`      | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้                           |
+| GET    | `/health`                          | ไม่ต้อง login         | ✅ ตัวแอปทำงาน (liveness) และบอก `version`         |
+| GET    | `/health/ready`                    | ไม่ต้อง login         | ✅ ต่อฐานข้อมูลได้ ถ้าไม่ได้ตอบ `503` ใช้ตัวนี้กับระบบเฝ้าระวัง |
 
 Frontend เดิมยังไม่มีหน้า Subscription จึงไม่อยู่ในขอบเขตการย้ายรอบแรก
 

@@ -42,6 +42,9 @@ function roleFromEmail(email: string): Role {
   return ROLES.find((role) => role.toLowerCase() === prefix) ?? 'Owner'
 }
 
+// What the mock user signed in with; unknown (anything is accepted) after a page reload.
+let mockPassword: string | null = null
+
 const unauthorized: MockResult = { status: 401, data: { title: 'Unauthorized', status: 401 } }
 
 const authRoutes: MockRoute[] = [
@@ -59,6 +62,7 @@ const authRoutes: MockRoute[] = [
         role: roleFromEmail(email),
       }
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(user))
+      mockPassword = password
       return { status: 200, data: session(user) }
     },
   ],
@@ -75,6 +79,25 @@ const authRoutes: MockRoute[] = [
     '/auth/logout',
     () => {
       sessionStorage.removeItem(SESSION_KEY)
+      return { status: 204 }
+    },
+  ],
+  [
+    'POST',
+    '/auth/change-password',
+    ({ body }) => {
+      const { currentPassword, newPassword } = body as Record<string, string>
+      if (mockPassword !== null && currentPassword !== mockPassword) {
+        return {
+          status: 400,
+          data: {
+            title: 'One or more validation errors occurred.',
+            status: 400,
+            errors: { CurrentPassword: ['The current password is incorrect.'] },
+          },
+        }
+      }
+      mockPassword = newPassword
       return { status: 204 }
     },
   ],

@@ -44,7 +44,7 @@ describe('routing', () => {
 
     await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
-    expect(navLinks()).toEqual(['/dashboard', '/pos', '/inventory', '/customers'])
+    expect(navLinks()).toEqual(['/dashboard', '/pos', '/inventory', '/customers', '/users'])
   })
 
   it('hides restricted menu items from a cashier and blocks the page itself', async () => {

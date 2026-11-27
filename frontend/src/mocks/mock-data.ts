@@ -1,8 +1,9 @@
 import type { Customer, LoyaltyTransaction } from '@/features/customers/types'
+import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types'
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
-import type { MockRoute } from './mock-api'
+import type { MockResult, MockRoute } from './mock-api'
 
 // In-memory stand-in for the contract endpoints the backend does not serve yet
 // (docs/API_REFERENCE.md §3–6). Data resets on every page reload. It does not check roles.
@@ -205,7 +206,88 @@ function changePoints(
 
 // ---------- Routes ----------
 
+// "u1" is the user the tests sign in as (src/test/render-app.tsx).
+const users: ManagedUser[] = [
+  {
+    id: 'u1',
+    email: 'user@shop.test',
+    name: 'Somchai',
+    role: 'Owner',
+    isActive: true,
+    createdAt: '2026-01-05T02:00:00Z',
+  },
+  {
+    id: 'u2',
+    email: 'somying@shop.test',
+    name: 'สมหญิง รักงาน',
+    role: 'Cashier',
+    isActive: true,
+    createdAt: '2026-02-11T03:30:00Z',
+  },
+  {
+    id: 'u3',
+    email: 'wichai@shop.test',
+    name: 'วิชัย ดูยอด',
+    role: 'Viewer',
+    isActive: false,
+    createdAt: '2026-03-20T08:15:00Z',
+  },
+]
+
+const conflict = (detail: string): MockResult => ({
+  status: 409,
+  data: { title: 'Conflict', status: 409, detail },
+})
+
 export const dataRoutes: MockRoute[] = [
+  // Users
+  ['GET', '/users', () => ({ status: 200, data: users.map((user) => ({ ...user })) })],
+  [
+    'POST',
+    '/users',
+    ({ body }) => {
+      const input = body as CreateUser
+      const email = input.email.trim().toLowerCase()
+      if (users.some((user) => user.email === email)) {
+        return conflict(`A user with email ${email} already exists.`)
+      }
+      const user: ManagedUser = {
+        id: crypto.randomUUID(),
+        email,
+        name: input.name.trim(),
+        role: input.role,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      }
+      users.push(user)
+      return { status: 201, data: { ...user } }
+    },
+  ],
+  [
+    'PUT',
+    '/users/:id',
+    ({ params, body }) => {
+      const user = users.find((candidate) => candidate.id === params.id)
+      if (!user) return notFound
+      const changes = body as UpdateUser
+      const role = changes.role ?? user.role
+      const isActive = changes.isActive ?? user.isActive
+      const losesOwnership =
+        user.role === 'Owner' && user.isActive && (role !== 'Owner' || !isActive)
+      const otherOwner = users.some((u) => u.id !== user.id && u.role === 'Owner' && u.isActive)
+      if (losesOwnership && !otherOwner) {
+        return conflict('The shop must keep at least one active owner.')
+      }
+      Object.assign(user, { name: changes.name?.trim() ?? user.name, role, isActive })
+      return { status: 200, data: { ...user } }
+    },
+  ],
+  [
+    'POST',
+    '/users/:id/reset-password',
+    ({ params }) => (users.some((user) => user.id === params.id) ? { status: 204 } : notFound),
+  ],
+
   // Inventory
   [
     'GET',

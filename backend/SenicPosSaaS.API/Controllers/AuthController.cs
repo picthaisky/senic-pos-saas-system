@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SenicPosSaaS.API.Auth;
 using SenicPosSaaS.Application.DTOs.Auth;
 using SenicPosSaaS.Application.Interfaces;
@@ -19,35 +20,49 @@ public class AuthController : ControllerBase
     private const string RefreshCookiePath = "/api/auth";
 
     private readonly IAuthService _authService;
+    private readonly LoginAttemptLimiter _loginAttempts;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, IWebHostEnvironment environment, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, LoginAttemptLimiter loginAttempts, IWebHostEnvironment environment, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _loginAttempts = loginAttempts;
         _environment = environment;
         _logger = logger;
     }
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(LoginProtectionOptions.RateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto request, CancellationToken cancellationToken)
     {
+        // Checked before the password, so a locked account cannot be guessed at any further.
+        if (_loginAttempts.IsLocked(request.TenantId, request.Email, out var retryAfter))
+        {
+            Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString("0");
+            return Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Too Many Requests", detail: "Too many failed sign-in attempts. Try again later.");
+        }
+
         var result = await _authService.LoginAsync(request, cancellationToken);
         if (result == null)
         {
+            _loginAttempts.RecordFailure(request.TenantId, request.Email);
             _logger.LogWarning("Failed login for tenant {TenantId}", request.TenantId);
             return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized", detail: "Incorrect tenant, email or password.");
         }
 
+        _loginAttempts.RecordSuccess(request.TenantId, request.Email);
         SetRefreshCookie(result);
         return Ok(result.Response);
     }
 
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [EnableRateLimiting(LoginProtectionOptions.RateLimitPolicy)]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AuthResponseDto>> Refresh(CancellationToken cancellationToken)
@@ -78,6 +93,35 @@ public class AuthController : ControllerBase
             await _authService.LogoutAsync(refreshToken, cancellationToken);
 
         ClearRefreshCookie();
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Changes the signed-in user's own password. Their other devices are signed out; this one
+    /// stays signed in.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    [EnableRateLimiting(LoginProtectionOptions.RateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto request, [FromServices] IUserService users, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(AppClaims.UserId), out var userId))
+            return Unauthorized();
+
+        var changed = await users.ChangeOwnPasswordAsync(
+            userId, request.CurrentPassword, request.NewPassword, Request.Cookies[RefreshCookieName], cancellationToken);
+        if (!changed)
+        {
+            // 400, not 401: the session is fine, the form was filled in wrongly. (A 401 would
+            // also make the web app try to refresh the session.)
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                [nameof(ChangePasswordDto.CurrentPassword)] = ["The current password is incorrect."]
+            }));
+        }
+
         return NoContent();
     }
 

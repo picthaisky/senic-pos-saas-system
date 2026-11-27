@@ -73,6 +73,8 @@ check(
 
 const health = await call('GET', '/health')
 check('API is healthy', health.status === 200 && health.json?.status === 'healthy', `version ${health.json?.version}`)
+const ready = await call('GET', '/health/ready')
+check('API can reach its database', ready.status === 200, `status ${ready.status}`)
 if (env.EXPECTED_VERSION) {
   check('running the expected version', health.json?.version === env.EXPECTED_VERSION, `got ${health.json?.version}`)
 }
@@ -111,6 +113,12 @@ if (!credentials) {
     'dashboard summary (also proves time zone data is present)',
     dashboard.status === 200 && dashboard.json?.salesByDay?.length === 7,
     `status ${dashboard.status}`,
+  )
+  const users = await call('GET', '/api/users')
+  check(
+    'user list includes the signed-in account',
+    users.status === 200 && users.json?.some((u) => u.email === credentials.email.toLowerCase()),
+    `status ${users.status}`,
   )
   const negotiate = await call('POST', '/hubs/notifications/negotiate?negotiateVersion=1')
   check('SignalR hub is reachable through the proxy', negotiate.status === 200 && !!negotiate.json?.connectionId, `status ${negotiate.status}`)
@@ -186,6 +194,28 @@ if (!credentials) {
 
     const remove = await call('DELETE', `/api/customers/${second.json?.id}`)
     check('delete customer', remove.status === 204, `status ${remove.status}`)
+
+    // A throw-away member of staff: added, signs in, is deactivated, can no longer sign in.
+    const staff = {
+      tenantId: credentials.tenantId,
+      email: `smoke-${Date.now()}@smoke.test`,
+      password: `Smoke-${Math.random().toString(36).slice(2)}-${Date.now()}`,
+    }
+    const signInAsStaff = () =>
+      fetch(base + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(staff),
+      })
+    const created = await call('POST', '/api/users', { email: staff.email, name: 'Smoke Staff', role: 'Cashier', password: staff.password })
+    check('add a user', created.status === 201 && created.json?.role === 'Cashier', `status ${created.status}`)
+    check('the new user can sign in', (await signInAsStaff()).status === 200)
+    const deactivated = await call('PUT', `/api/users/${created.json?.id}`, { isActive: false })
+    const refused = await signInAsStaff()
+    check('a deactivated user cannot sign in', deactivated.status === 200 && refused.status === 401, `status ${refused.status}`)
+    const self = users.json?.find((u) => u.email === credentials.email.toLowerCase())
+    const lockOut = await call('PUT', `/api/users/${self?.id}`, { isActive: false })
+    check('a manager cannot deactivate their own account', lockOut.status === 409, `status ${lockOut.status}`)
   }
 
   const logout = await call('POST', '/api/auth/logout')
