@@ -74,6 +74,12 @@ export function getProblem(error: unknown): ProblemDetails | undefined {
   return data && typeof data === 'object' ? (data as ProblemDetails) : undefined
 }
 
+/** The server's explanation when it sent one (e.g. "Insufficient stock"), otherwise `fallback`. */
+export function errorMessage(error: unknown, fallback: string): string {
+  const problem = getProblem(error)
+  return problem?.detail || problem?.title || fallback
+}
+
 export function getStatus(error: unknown): number | undefined {
   return axios.isAxiosError(error) ? error.response?.status : undefined
 }

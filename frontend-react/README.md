@@ -30,12 +30,14 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 
 ## โหมดจำลอง (mock)
 
-Backend ยังไม่มีระบบ login ดังนั้น `.env.development` ตั้ง `VITE_USE_MOCKS=true` ไว้
-เพื่อให้ `src/mocks/mock-api.ts` ตอบ `/api/auth/*` แทน ส่วน request อื่นยังวิ่งไป backend จริงผ่าน proxy
+Backend ยังไม่ได้ทำตาม API contract (`../docs/API_REFERENCE.md`) ดังนั้น `.env.development` ตั้ง
+`VITE_USE_MOCKS=true` ไว้ เพื่อให้ `src/mocks/` ตอบทุก endpoint ใน contract แทนจากข้อมูลตัวอย่างใน memory
 
-- ใช้รหัสร้าน อีเมล และรหัสผ่านใดก็ได้ (รหัสผ่านอย่างน้อย 6 ตัวอักษร)
+- Login ด้วยรหัสร้าน อีเมล และรหัสผ่านใดก็ได้ (รหัสผ่านอย่างน้อย 6 ตัวอักษร)
 - ขึ้นต้นอีเมลด้วย `admin@`, `cashier@` หรือ `viewer@` เพื่อทดสอบแต่ละ role อีเมลอื่นได้ role Owner
-- เมื่อ backend มี `AuthController` แล้วให้ตั้งเป็น `false` โหมดนี้ไม่ถูกรวมใน production build
+- ข้อมูลที่เพิ่ม แก้ หรือขาย จะหายเมื่อ reload หน้า
+- Mock ไม่ตรวจ role ฝั่ง API การกันสิทธิ์ที่เห็นมาจาก route guard ของ frontend เท่านั้น
+- เมื่อ backend พร้อมแล้วให้ตั้งเป็น `false` โหมดนี้ไม่ถูกรวมใน production build
 
 ## โครงสร้าง
 
@@ -48,9 +50,9 @@ src/
 ├── lib/                # api (axios + auto-refresh), query-client, env, cn
 ├── stores/             # Zustand stores: auth, theme, toast
 ├── i18n/locales/       # th.json (ต้นแบบของ key), en.json
-├── mocks/              # mock API สำหรับ dev
+├── mocks/              # mock API สำหรับ dev และ test (mock-api = ตัวจับ route, mock-data = ข้อมูล)
 ├── styles/index.css    # Tailwind + design tokens
-└── test/setup.ts
+└── test/               # setup.ts, render-app.tsx (render ทั้งแอปพร้อม mock สำหรับ test)
 ```
 
 ## ข้อตกลงในโค้ด

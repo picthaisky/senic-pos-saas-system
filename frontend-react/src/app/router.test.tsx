@@ -1,79 +1,56 @@
-import { render, screen } from '@testing-library/react'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { screen } from '@testing-library/react'
 import i18n from '@/i18n'
-import { type Role, useAuthStore } from '@/stores/auth'
-import { routes } from './router'
-
-function signInAs(role: Role) {
-  useAuthStore.getState().setSession({
-    accessToken: 'token',
-    expiresAt: '',
-    user: { id: 'u1', email: 'user@shop.test', name: 'Somchai', tenantId: 't1', role },
-  })
-}
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
-}
+import { renderApp } from '@/test/render-app'
 
 const navLinks = () => screen.getAllByRole('link').map((link) => link.getAttribute('href'))
 
 describe('routing', () => {
-  it('sends anonymous visitors to the login page and remembers where they were going', () => {
-    useAuthStore.getState().clearSession()
+  it('sends anonymous visitors to the login page and remembers where they were going', async () => {
+    const router = renderApp('/inventory?lowStock=true', null)
 
-    const router = renderAt('/inventory?lowStock=true')
-
-    expect(screen.getByRole('form', { name: i18n.t('auth.title') })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: i18n.t('auth.title') })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/auth/login')
     expect(new URLSearchParams(router.state.location.search).get('returnUrl')).toBe(
       '/inventory?lowStock=true',
     )
   })
 
-  it('waits for the session check instead of redirecting while auth is loading', () => {
-    useAuthStore.setState({ status: 'loading', user: null, accessToken: null })
+  it('waits for the session check instead of redirecting while auth is loading', async () => {
+    const router = renderApp('/inventory', 'loading')
 
-    const router = renderAt('/inventory')
+    // Let the lazy route finish loading so a redirect would have happened by now.
+    await vi.waitFor(() => expect(router.state.initialized).toBe(true))
 
     expect(screen.getByRole('status', { name: i18n.t('common.loading') })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/inventory')
   })
 
-  it('returns a signed-in user from the login page to the requested page', () => {
-    signInAs('Owner')
+  it('returns a signed-in user from the login page to the requested page', async () => {
+    const router = renderApp('/auth/login?returnUrl=%2Fcustomers')
 
-    const router = renderAt('/auth/login?returnUrl=%2Fcustomers')
-
+    await screen.findByRole('heading', { name: i18n.t('nav.customers') })
     expect(router.state.location.pathname).toBe('/customers')
   })
 
-  it('ignores a returnUrl that points to another site', () => {
-    signInAs('Owner')
+  it('ignores a returnUrl that points to another site', async () => {
+    const router = renderApp('/auth/login?returnUrl=%2F%2Fevil.example')
 
-    const router = renderAt('/auth/login?returnUrl=%2F%2Fevil.example')
-
+    await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
   })
 
-  it('shows an owner every menu item and opens the dashboard by default', () => {
-    signInAs('Owner')
+  it('shows an owner every menu item and opens the dashboard by default', async () => {
+    const router = renderApp('/')
 
-    const router = renderAt('/')
-
+    await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
     expect(navLinks()).toEqual(['/dashboard', '/pos', '/inventory', '/customers'])
-    expect(screen.getByRole('heading', { name: i18n.t('nav.dashboard') })).toBeInTheDocument()
   })
 
-  it('hides restricted menu items from a cashier and blocks the page itself', () => {
-    signInAs('Cashier')
+  it('hides restricted menu items from a cashier and blocks the page itself', async () => {
+    renderApp('/inventory', 'Cashier')
 
-    renderAt('/inventory')
-
-    expect(screen.getByRole('heading', { name: i18n.t('forbidden.title') })).toBeInTheDocument()
+    await screen.findByRole('heading', { name: i18n.t('forbidden.title') })
     expect(navLinks()).not.toContain('/inventory')
     expect(navLinks()).toContain('/pos')
   })

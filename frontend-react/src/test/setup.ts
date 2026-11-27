@@ -10,3 +10,21 @@ import '@/i18n'
 expect.extend(matchers)
 
 afterEach(() => cleanup())
+
+// Browser APIs that jsdom does not implement.
+
+// Recharts' ResponsiveContainer needs it; charts simply render empty in tests.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+// <dialog> modal methods, used by the Modal component.
+HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+  this.setAttribute('open', '')
+}
+HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+  this.removeAttribute('open')
+  this.dispatchEvent(new Event('close'))
+}
