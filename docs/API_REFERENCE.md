@@ -1,6 +1,6 @@
 # API Contract v1 – Senic POS
 
-เอกสารนี้เป็นข้อตกลงระหว่าง frontend (React, `frontend-react/`) กับ backend (.NET, `backend/`)
+เอกสารนี้เป็นข้อตกลงระหว่าง frontend (React, `frontend/`) กับ backend (.NET, `backend/`)
 Backend ทำตาม contract นี้ครบแล้ว และมี integration test กำกับใน `backend/SenicPosSaaS.Tests/Api/`
 
 - ✅ ใช้ได้แล้ว

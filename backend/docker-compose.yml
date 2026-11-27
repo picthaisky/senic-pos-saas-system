@@ -40,6 +40,23 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
 
+  # React frontend served by nginx, which also forwards /api to the API above.
+  # Open http://localhost:8080
+  senicpos-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: senicpos-web
+    environment:
+      - API_UPSTREAM=http://senicpos-api:8080
+    ports:
+      - "8080:80"
+    depends_on:
+      - senicpos-api
+    networks:
+      - senicpos-network
+    restart: unless-stopped
+
 networks:
   senicpos-network:
     driver: bridge
