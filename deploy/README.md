@@ -26,6 +26,7 @@ Stack เป็นแบบ **Git-based**: Portainer อ่านไฟล์ co
 | `deploy/docker-compose.yml`             | Stack ของ production                                    |
 | `deploy/stack.env.example`              | รายการตัวแปรของ stack พร้อมคำอธิบาย                        |
 | `deploy/portainer.mjs`                  | Script สั่ง Portainer: `create`, `deploy`, `wait-healthy` |
+| `deploy/smoke-test.mjs`                 | ตรวจ stack ที่รันอยู่: โหมดอ่านอย่างเดียวและโหมดเต็ม             |
 | `.github/workflows/ci.yml`              | Test ทุก pull request                                    |
 | `.github/workflows/deploy.yml`          | Build image และ deploy เมื่อ push เข้า `main`              |
 | `.github/workflows/portainer-stack.yml` | สร้าง stack ครั้งแรก (กดรันเอง)                             |
@@ -152,6 +153,22 @@ docker compose -p senicpos-local --env-file /path/to/stack.env -f deploy/docker-
 ```
 
 บน `localhost` เบราว์เซอร์ยอมรับ cookie แบบ `Secure` ผ่าน HTTP จึง login ได้ตามปกติ
+
+## ตรวจว่า stack ใช้งานได้ (smoke test)
+
+`deploy/smoke-test.mjs` ตรวจ stack ที่รันอยู่ผ่านที่อยู่สาธารณะของมัน ไม่ต้องติดตั้งอะไรเพิ่มนอกจาก Node
+
+```bash
+# โหมดอ่านอย่างเดียว (ค่าเริ่มต้น): ไม่แก้ข้อมูล ใช้กับ production ได้
+SMOKE_URL=https://pos.example.com \
+SMOKE_TENANT_ID=... SMOKE_EMAIL=... SMOKE_PASSWORD=... node deploy/smoke-test.mjs
+
+# โหมดเต็ม: สร้างสินค้า ลูกค้า และบิล ใช้กับ stack ทดสอบเท่านั้น
+SMOKE_MODE=full SMOKE_URL=http://localhost:8080 ... node deploy/smoke-test.mjs
+```
+
+ถ้าไม่ใส่บัญชี จะตรวจเฉพาะส่วนที่ไม่ต้อง login (หน้าเว็บ, `/health`, การบังคับ login)
+CI รันโหมดเต็มและ test ในเบราว์เซอร์กับ stack ที่ build จาก commit นั้นทุกครั้ง (job `stack` ใน `ci.yml`)
 
 ## ข้อจำกัดที่ควรรู้
 

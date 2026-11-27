@@ -47,8 +47,10 @@ function register(subscription: PushSubscription, language: string) {
 export async function getPushState(): Promise<PushState> {
   const reg = await registration()
   if (!reg) return 'unsupported'
-  if (Notification.permission === 'denied') return 'blocked'
+  // Checked first: with push turned off on the server there is nothing to offer, whatever the
+  // browser's permission says.
   if ((await fetchPublicKey()) === null) return 'unavailable'
+  if (Notification.permission === 'denied') return 'blocked'
   return (await reg.pushManager.getSubscription()) ? 'on' : 'off'
 }
 

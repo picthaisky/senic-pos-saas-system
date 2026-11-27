@@ -28,7 +28,16 @@ public class OrderService : IOrderService
         _notifier = notifier;
     }
 
-    public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto, CancellationToken cancellationToken = default)
+    public Task<OrderDto> CreateOrderAsync(CreateOrderDto dto, CancellationToken cancellationToken = default) =>
+        // Repeated from fresh data when another sale changed the same stock in the meantime, or
+        // when the same clientOrderId was being saved by a parallel request (then the retry
+        // finds that order and returns it).
+        ConcurrencyRetry.RunAsync(
+            () => CreateOrderOnceAsync(dto, cancellationToken),
+            _orderRepository.DiscardChanges,
+            "The sale could not be recorded because the items are being sold elsewhere. Please try again.");
+
+    private async Task<OrderDto> CreateOrderOnceAsync(CreateOrderDto dto, CancellationToken cancellationToken)
     {
         // Idempotency: a retried request must not sell the same cart twice.
         if (dto.ClientOrderId.HasValue)
@@ -141,7 +150,14 @@ public class OrderService : IOrderService
         return orders.Select(MapToOrderDto).ToList();
     }
 
-    public async Task<bool> CancelOrderAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task<bool> CancelOrderAsync(Guid id, CancellationToken cancellationToken = default) =>
+        // Returning stock competes with sales of the same items, so it retries the same way.
+        ConcurrencyRetry.RunAsync(
+            () => CancelOrderOnceAsync(id, cancellationToken),
+            _orderRepository.DiscardChanges,
+            "The order could not be cancelled because its items are being sold right now. Please try again.");
+
+    private async Task<bool> CancelOrderOnceAsync(Guid id, CancellationToken cancellationToken)
     {
         var order = await _orderRepository.GetOrderWithItemsAsync(id, cancellationToken);
         if (order == null) return false;

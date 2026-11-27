@@ -76,6 +76,20 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 - **ส่งออก CSV**: ปุ่ม "ส่งออก CSV" ในหน้า Inventory (ทุกแถวที่ตรงกับตัวกรอง ไม่ใช่เฉพาะหน้าที่เห็น) และหน้า Customers
   ไฟล์เปิดใน Excel ได้โดยตรงและอ่านภาษาไทยถูกต้อง โค้ดอยู่ที่ `src/lib/export-csv.ts`
 
+## Test ในเบราว์เซอร์จริง (end-to-end)
+
+`npm test` รันใน jsdom กับ API จำลอง ส่วน `npm run e2e` เปิดเบราว์เซอร์จริงด้วย Playwright กับ stack จริง (web, api, postgres)
+ครอบคลุม login, การขาย, การขายออฟไลน์แล้วส่งบิล, การอัปเดตข้ามหน้าต่างแบบ real-time และภาษา/โหมดมืด/จอมือถือ
+
+```bash
+npx playwright install chromium     # ครั้งแรกเท่านั้น
+E2E_URL=http://localhost:8080 E2E_TENANT_ID=... E2E_EMAIL=... E2E_PASSWORD=... npm run e2e
+```
+
+- ใช้บัญชี Owner ของ stack ทดสอบเท่านั้น เพราะ test สร้างสินค้าและบิลจริง วิธีรัน stack ในเครื่องอยู่ใน `../deploy/README.md`
+- ตั้ง `E2E_SCREENSHOTS=<โฟลเดอร์>` เพื่อเก็บภาพของแต่ละหน้าจอไว้ให้คนตรวจ
+- `node scripts/check-realtime.mjs` ตรวจการแจ้งเตือนผ่าน WebSocket โดยไม่ต้องเปิดเบราว์เซอร์ (ใช้ตัวแปร `SMOKE_*` ชุดเดียวกับ smoke test)
+
 ## โครงสร้าง
 
 ```text

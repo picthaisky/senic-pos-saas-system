@@ -261,6 +261,8 @@ Vite dev server และ nginx ของ frontend ตั้ง proxy ให้ 
 - **การขายถือว่าชำระแล้ว**: `POST /api/orders` สร้าง order สถานะ `Completed` ทันที Dashboard นับเฉพาะสถานะนี้
 - **ลบลูกค้า** เป็นการปิดการใช้งาน (soft delete) order เดิมของลูกค้ายังอยู่ครบ
 - **`PUT`** ทั้งของ inventory และ customers ข้าม field ที่ส่งเป็น `null` จึงยังล้างค่า field ให้ว่างไม่ได้
+- **การทำงานพร้อมกัน**: สต็อกและแต้มสะสมมีการตรวจเวอร์ชันของแถว ถ้าสองคำขอแก้พร้อมกัน ระบบอ่านข้อมูลใหม่แล้วลองอีกครั้ง จึงขายเกินสต็อกหรือแลกแต้มเกินยอดไม่ได้ การแก้ไขสินค้าที่ชนกับการขายคืน `409` ให้โหลดข้อมูลใหม่
+- **ฐานข้อมูล**: รองรับ PostgreSQL เท่านั้น
 - **`Jwt:Key`** ต้องตั้งเองนอก Development (เช่น environment variable `Jwt__Key`) ไม่เช่นนั้น API จะไม่ start
 - **`Cors:AllowedOrigins`** ต้องใส่ origin ของ frontend เมื่อ frontend กับ API อยู่คนละ origin
 - **`Push:PublicKey`, `Push:PrivateKey`, `Push:Subject`** ต้องตั้งเองนอก Development จึงจะใช้ push ได้ ถ้าไม่ตั้ง ระบบส่วนอื่นทำงานปกติและปุ่มแจ้งเตือนจะไม่แสดง
@@ -273,6 +275,5 @@ Vite dev server และ nginx ของ frontend ตั้ง proxy ให้ 
    ตอนนี้จำกัดที่ role `Admin` ของ tenant ใดก็ได้ ซึ่งยังเห็นข้อมูล subscription ของ tenant อื่น
    ต้องแยกเป็นสิทธิ์ของผู้ดูแลแพลตฟอร์มก่อนใช้งานจริง
 3. **การจัดการผู้ใช้** ยังไม่มี endpoint สำหรับสร้างหรือแก้ไขผู้ใช้และเปลี่ยนรหัสผ่าน
-4. **Migration** สร้างสำหรับ PostgreSQL เท่านั้น ตัวเลือก SQL Server (`UsePostgreSQL=false`) ยังไม่มี migration
-5. **Pagination** ทุก list คืน array ทั้งหมด ควรแบ่งหน้าที่ server เมื่อข้อมูลมีหลักพันรายการ
-6. **Receipt PDF** (`GET /api/orders/{id}/receipt`) ยังไม่ได้ทำ
+4. **Pagination** ทุก list คืน array ทั้งหมด ควรแบ่งหน้าที่ server เมื่อข้อมูลมีหลักพันรายการ
+5. **Receipt PDF** (`GET /api/orders/{id}/receipt`) ยังไม่ได้ทำ

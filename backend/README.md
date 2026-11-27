@@ -166,8 +166,7 @@ Edit `SenicPosSaaS.API/appsettings.json`:
 {
   "ConnectionStrings": {
     "PostgreSQL": "Host=localhost;Port=5432;Database=SenicPosDb;Username=postgres;Password=yourpassword"
-  },
-  "UsePostgreSQL": true
+  }
 }
 ```
 
@@ -278,15 +277,18 @@ token, never from the URL or the request body.
 
 ## 🧪 Testing
 
-Run all tests:
 ```bash
-dotnet test
+dotnet test                                   # everything (needs Docker)
+dotnet test --filter "Category!=Postgres"     # without Docker
 ```
 
-Run tests with coverage:
-```bash
-dotnet test --collect:"XPlat Code Coverage"
-```
+- **Unit tests** (`Services/`, `Repositories/`): services and repositories in isolation.
+- **API tests** (`Api/`): the real HTTP pipeline (authentication, roles, tenant isolation,
+  business rules, SignalR, push) on an in-memory database.
+- **PostgreSQL tests** (`Api/PostgresTests.cs`, category `Postgres`): the same API suites again
+  on a real PostgreSQL started with Testcontainers and created from the migrations, plus
+  concurrency tests (simultaneous sales, redemptions and duplicate submissions) that only a real
+  database can show. They need a running Docker daemon.
 
 ## 📝 Sample API Requests
 

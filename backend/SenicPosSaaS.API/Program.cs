@@ -62,18 +62,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure Database - PostgreSQL by default, SQL Server optional
-var usePostgreSQL = builder.Configuration.GetValue<bool>("UsePostgreSQL", true);
-if (usePostgreSQL)
-{
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
-}
-else
-{
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseSqlServer(builder.Configuration.GetConnectionString("SQLServer")));
-}
+// Database: PostgreSQL. The migrations and the stock/points concurrency checks are written for it.
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
 
 // Authentication: JWT access tokens. Options are bound lazily so that configuration added by
 // the host (environment variables, test overrides) is always taken into account.

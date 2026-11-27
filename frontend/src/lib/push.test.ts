@@ -106,11 +106,12 @@ describe('getPushState', () => {
     browser.subscription = fakeSubscription()
     expect(await getPushState()).toBe('on')
 
-    server.hasKeys = false
-    expect(await getPushState()).toBe('unavailable')
-
     vi.stubGlobal('Notification', { permission: 'denied' })
     expect(await getPushState()).toBe('blocked')
+
+    // With push turned off on the server there is nothing to offer, even if the browser blocks it.
+    server.hasKeys = false
+    expect(await getPushState()).toBe('unavailable')
   })
 })
 

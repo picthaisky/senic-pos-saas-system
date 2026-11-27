@@ -15,4 +15,10 @@ public class InventoryItem : TenantEntity
     public string? Category { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Changes every time the row is saved (PostgreSQL's xmin). A save fails if the row changed
+    /// since it was read, so two requests can never both act on the same old value.
+    /// </summary>
+    public uint RowVersion { get; set; }
 }

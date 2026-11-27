@@ -34,7 +34,6 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      UsePostgreSQL: "true"
       # Do not use ";" in the password: it separates the parts of this connection string.
       ConnectionStrings__PostgreSQL: Host=postgres;Port=5432;Database=SenicPosDb;Username=postgres;Password=${POSTGRES_PASSWORD}
       # One API container, so it can safely apply database migrations when it starts.

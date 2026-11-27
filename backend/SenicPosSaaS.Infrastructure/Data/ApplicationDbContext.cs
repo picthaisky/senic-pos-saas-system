@@ -132,6 +132,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Cost).HasPrecision(18, 2);
             entity.Property(e => e.Category).HasMaxLength(100);
             entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            // Guards the stock level against simultaneous sales.
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         // Configure Customer entity
@@ -146,6 +148,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(200);
             entity.Property(e => e.Phone).HasMaxLength(20);
             entity.Property(e => e.Address).HasMaxLength(500);
+            // Guards the loyalty balance against simultaneous redemptions.
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         // Configure Subscription entity

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Domain.Interfaces;
 using SenicPosSaaS.Infrastructure.Data;
@@ -54,6 +55,20 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
 
     public virtual async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            return await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            // A row with a version column (stock, loyalty points) changed since it was read.
+            throw new ConcurrencyException("The data was changed by someone else.", exception);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new DuplicateKeyException("A record with the same unique value already exists.", exception);
+        }
     }
+
+    public void DiscardChanges() => _context.ChangeTracker.Clear();
 }

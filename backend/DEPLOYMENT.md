@@ -45,8 +45,7 @@ Edit `SenicPosSaaS.API/appsettings.Development.json`:
 {
   "ConnectionStrings": {
     "PostgreSQL": "Host=localhost;Port=5432;Database=SenicPosDb;Username=postgres;Password=yourpassword"
-  },
-  "UsePostgreSQL": true
+  }
 }
 ```
 

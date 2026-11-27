@@ -76,6 +76,7 @@ describe('point of sale', () => {
     )
     // 2 × ฿10 + 7% tax
     expect(cart.getByText('฿21.40')).toBeInTheDocument()
+    expect(cart.getByText('ภาษี (7%)')).toBeInTheDocument()
 
     fireEvent.click(cart.getByRole('button', { name: t('pos.checkout') }))
 

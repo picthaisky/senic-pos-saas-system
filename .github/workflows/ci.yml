@@ -68,3 +68,93 @@ jobs:
           POSTGRES_PASSWORD: placeholder
           JWT_KEY: placeholder
         run: docker compose -f deploy/docker-compose.yml config --quiet
+
+  stack:
+    name: Stack end-to-end
+    # The slowest job: only worth running once the fast checks pass.
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the images
+        run: |
+          docker build --build-arg APP_VERSION=ci -t ghcr.io/picthaisky/senic-pos-saas-system-api:ci backend
+          docker build -t ghcr.io/picthaisky/senic-pos-saas-system-web:ci frontend
+
+      - name: Start the production stack
+        run: |
+          # Throw-away secrets and a first user for this run only.
+          password="$(openssl rand -hex 12)"
+          echo "::add-mask::$password"
+          tenant="$(uuidgen)"
+          {
+            echo "IMAGE_TAG=ci"
+            echo "WEB_PORT=8080"
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "JWT_KEY=$(openssl rand -hex 32)"
+            echo "BOOTSTRAP_TENANT_ID=$tenant"
+            echo "BOOTSTRAP_OWNER_EMAIL=owner@ci.test"
+            echo "BOOTSTRAP_OWNER_PASSWORD=$password"
+          } > "$RUNNER_TEMP/stack.env"
+          docker compose -p ci --env-file "$RUNNER_TEMP/stack.env" -f deploy/docker-compose.yml up -d --wait
+          {
+            echo "STACK_URL=http://localhost:8080"
+            echo "STACK_TENANT_ID=$tenant"
+            echo "STACK_EMAIL=owner@ci.test"
+            echo "STACK_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      - name: Smoke test
+        env:
+          SMOKE_URL: ${{ env.STACK_URL }}
+          SMOKE_TENANT_ID: ${{ env.STACK_TENANT_ID }}
+          SMOKE_EMAIL: ${{ env.STACK_EMAIL }}
+          SMOKE_PASSWORD: ${{ env.STACK_PASSWORD }}
+          SMOKE_MODE: full
+          EXPECTED_VERSION: ci
+        run: node deploy/smoke-test.mjs
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Live notifications over WebSockets
+        working-directory: frontend
+        env:
+          SMOKE_URL: ${{ env.STACK_URL }}
+          SMOKE_TENANT_ID: ${{ env.STACK_TENANT_ID }}
+          SMOKE_EMAIL: ${{ env.STACK_EMAIL }}
+          SMOKE_PASSWORD: ${{ env.STACK_PASSWORD }}
+        run: node scripts/check-realtime.mjs
+
+      - name: Browser tests
+        working-directory: frontend
+        env:
+          E2E_URL: ${{ env.STACK_URL }}
+          E2E_TENANT_ID: ${{ env.STACK_TENANT_ID }}
+          E2E_EMAIL: ${{ env.STACK_EMAIL }}
+          E2E_PASSWORD: ${{ env.STACK_PASSWORD }}
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+      - name: Container logs
+        if: failure()
+        run: docker compose -p ci --env-file "$RUNNER_TEMP/stack.env" -f deploy/docker-compose.yml logs --no-color --tail 200
+
+      - name: Upload the browser test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
