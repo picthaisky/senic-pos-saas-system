@@ -1,7 +1,7 @@
 # Master Prompt – Backend API (POS SaaS System)
 
 ## Context
-ฉันกำลังพัฒนาระบบ POS SaaS (Point of Sale Software-as-a-Service) สำหรับธุรกิจร้านค้า/ร้านอาหาร ที่ให้บริการลูกค้าแบบ Subscription รายเดือน โดยใช้ **.NET Core 9** และ **SQL Server** เป็นหลัก ต้องการออกแบบและพัฒนา API ที่มีคุณสมบัติตามนี้:
+ฉันกำลังพัฒนาระบบ POS SaaS (Point of Sale Software-as-a-Service) สำหรับธุรกิจร้านค้า/ร้านอาหาร ที่ให้บริการลูกค้าแบบ Subscription รายเดือน โดยใช้ **.NET Core 10** และ **SQL Server** เป็นหลัก ต้องการออกแบบและพัฒนา API ที่มีคุณสมบัติตามนี้:
 
 - รองรับ Multi-Tenant (หลายร้านใช้ระบบเดียวกัน แต่ข้อมูลแยกกันชัดเจน)
 - Authentication & Authorization (JWT, Role-based Access, Tenant Isolation)
@@ -21,10 +21,10 @@
 2. ออกแบบ **API Endpoint** ที่เป็น RESTful (หรือ GraphQL ถ้าคุ้มค่า)
 3. เสนอ **Best Practices** เช่น Repository Pattern, Clean Architecture, CQRS, Unit of Work
 4. เสนอ **Security & Performance Considerations** ที่เหมาะกับ SaaS
-5. สร้าง **Sample Code** (C#, .NET 9, EF Core, Repository, Controller)
+5. สร้าง **Sample Code** (C#, .NET 10, EF Core, Repository, Controller)
 
 ## Expected Output
 - Database schema (ERD, SQL Script ตัวอย่าง)
 - API Design (Endpoints, Input/Output models)
-- ตัวอย่างโค้ด API (C#, .NET Core 9)
+- ตัวอย่างโค้ด API (C#, .NET Core 10)
 - Guideline สำหรับ Deployment (Docker, Cloud)

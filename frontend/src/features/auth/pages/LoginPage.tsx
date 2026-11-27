@@ -56,7 +56,14 @@ export function LoginPage() {
     } catch (err) {
       // 400 = the tenant id or email is malformed; to the user that is the same mistake as a 401.
       const status = getStatus(err)
-      setError(status === 401 || status === 400 ? t('auth.invalidCredentials') : t('common.error'))
+      // 429 = too many wrong passwords for this account, or too many requests from this network.
+      setError(
+        status === 429
+          ? t('auth.tooManyAttempts')
+          : status === 401 || status === 400
+            ? t('auth.invalidCredentials')
+            : t('common.error'),
+      )
       setSubmitting(false)
     }
   }

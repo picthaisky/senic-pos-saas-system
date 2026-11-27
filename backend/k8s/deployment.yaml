@@ -1,10 +1,20 @@
+# The API must run as ONE replica for now. It keeps the push-notification queue and the
+# SignalR groups in memory, so with several replicas live updates would only reach users
+# connected to the same pod. Running more needs a Redis backplane and a durable queue first
+# (docs/project/09-improvement-plan.md, phase D). For the same reason there is no autoscaler.
+#
+# The API does not migrate the database in Production: apply the migrations before deploying
+# (see DEPLOYMENT.md), or set Database__MigrateOnStartup=true, which is safe with one replica.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: senicpos-api
   namespace: senicpos
 spec:
-  replicas: 3
+  replicas: 1
+  # Replace the pod instead of running old and new side by side, which would be two instances.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: senicpos-api
@@ -26,11 +36,6 @@ spec:
             configMapKeyRef:
               name: senicpos-api-config
               key: ASPNETCORE_ENVIRONMENT
-        - name: UsePostgreSQL
-          valueFrom:
-            configMapKeyRef:
-              name: senicpos-api-config
-              key: UsePostgreSQL
         - name: ConnectionStrings__PostgreSQL
           valueFrom:
             secretKeyRef:
@@ -80,29 +85,3 @@ spec:
     port: 80
     targetPort: 8080
   type: LoadBalancer
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: senicpos-api-hpa
-  namespace: senicpos
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: senicpos-api
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80

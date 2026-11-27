@@ -74,7 +74,9 @@ export const useCartStore = create<CartState>((set, get) => ({
   clear: () => set(emptyCart()),
 }))
 
-export const TAX_RATE = 0.07
+/** Shown to the user as a whole number; 0.07 * 100 is 7.000000000000001 in floating point. */
+export const TAX_PERCENT = 7
+export const TAX_RATE = TAX_PERCENT / 100
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100
 

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using SenicPosSaaS.Application.Common;
+using SenicPosSaaS.Domain.Common;
 
 namespace SenicPosSaaS.API.Auth;
 
@@ -19,11 +20,15 @@ public class ApiExceptionHandler : IExceptionHandler
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (status, title) = exception switch
+        // The last two reach here only from operations that do not retry on their own (e.g. editing
+        // an item while it is being sold): the client should reload and try again.
+        var (status, title, detail) = exception switch
         {
-            ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
-            NotFoundException => (StatusCodes.Status404NotFound, "Not Found"),
-            _ => (0, string.Empty)
+            ConflictException => (StatusCodes.Status409Conflict, "Conflict", exception.Message),
+            NotFoundException => (StatusCodes.Status404NotFound, "Not Found", exception.Message),
+            ConcurrencyException => (StatusCodes.Status409Conflict, "Conflict", "The data was changed by someone else. Reload and try again."),
+            DuplicateKeyException => (StatusCodes.Status409Conflict, "Conflict", "A record with the same unique value already exists."),
+            _ => (0, string.Empty, string.Empty)
         };
         if (status == 0) return false;
 
@@ -32,7 +37,7 @@ public class ApiExceptionHandler : IExceptionHandler
         {
             HttpContext = httpContext,
             Exception = exception,
-            ProblemDetails = new ProblemDetails { Status = status, Title = title, Detail = exception.Message }
+            ProblemDetails = new ProblemDetails { Status = status, Title = title, Detail = detail }
         });
     }
 }

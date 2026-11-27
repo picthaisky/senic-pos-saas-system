@@ -28,7 +28,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=SenicPosDb;Username=postgres;Password=postgres
-      - UsePostgreSQL=true
     ports:
       - "5000:8080"
     depends_on:

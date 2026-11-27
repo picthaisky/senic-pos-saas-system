@@ -11,6 +11,15 @@ server {
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml application/manifest+json;
 
+    # The API's health endpoints, exposed so the stack can be checked from outside:
+    # /health answers when nginx and the API are up, /health/ready also needs the database.
+    # Point an uptime monitor at /health/ready.
+    location /health {
+        proxy_pass ${API_UPSTREAM};
+        proxy_set_header Host $host;
+        add_header Cache-Control "no-store";
+    }
+
     # API and SignalR hubs
     location /api/ {
         proxy_pass ${API_UPSTREAM};

@@ -1,4 +1,4 @@
-import { Eye, Star, Trash2, UserSearch } from 'lucide-react'
+import { Download, Eye, Star, Trash2, UserSearch } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -12,6 +12,7 @@ import {
   PageHeader,
 } from '@/components/ui'
 import { errorMessage } from '@/lib/api'
+import { type CsvColumn, datedFilename, downloadCsv } from '@/lib/export-csv'
 import { formatNumber } from '@/lib/format'
 import { toast } from '@/stores/toast'
 import { useCustomers, useDeleteCustomer } from '../api'
@@ -28,6 +29,17 @@ export function CustomersPage() {
 
   // Looked up from the list so the detail panel shows fresh points after each change.
   const selected = customers.data?.find((customer) => customer.id === selectedId) ?? null
+
+  function exportCsv() {
+    const exportColumns: CsvColumn<Customer>[] = [
+      { header: t('customers.firstName'), value: (customer) => customer.firstName },
+      { header: t('customers.lastName'), value: (customer) => customer.lastName },
+      { header: t('customers.email'), value: (customer) => customer.email },
+      { header: t('customers.phone'), value: (customer) => customer.phone },
+      { header: t('customers.points'), value: (customer) => customer.loyaltyPoints },
+    ]
+    downloadCsv(datedFilename('customers'), customers.data ?? [], exportColumns)
+  }
 
   function confirmDelete() {
     if (!deleting) return
@@ -91,7 +103,15 @@ export function CustomersPage() {
 
   return (
     <>
-      <PageHeader title={t('nav.customers')} />
+      <PageHeader
+        title={t('nav.customers')}
+        actions={
+          <Button variant="secondary" disabled={!customers.data?.length} onClick={exportCsv}>
+            <Download className="size-5" />
+            {t('common.exportCsv')}
+          </Button>
+        }
+      />
 
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-4 lg:col-span-2">

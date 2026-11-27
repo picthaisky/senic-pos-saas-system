@@ -1,4 +1,4 @@
-import { Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
+import { Download, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui'
 import type { SortState } from '@/components/ui/DataTable'
 import { errorMessage } from '@/lib/api'
+import { type CsvColumn, datedFilename, downloadCsv } from '@/lib/export-csv'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { toast } from '@/stores/toast'
@@ -63,6 +64,25 @@ export function InventoryPage() {
   const lastPage = Math.max(0, Math.ceil(sorted.length / pageSize) - 1)
   const currentPage = Math.min(page, lastPage)
   const rows = sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+
+  /** Exports every row matching the current filters and sort, not just the visible page. */
+  function exportCsv() {
+    const exportColumns: CsvColumn<InventoryItem>[] = [
+      { header: t('inventory.name'), value: (item) => item.name },
+      { header: t('inventory.sku'), value: (item) => item.sku },
+      { header: t('inventory.barcode'), value: (item) => item.barcode },
+      { header: t('inventory.category'), value: (item) => item.category },
+      { header: t('inventory.price'), value: (item) => item.price },
+      { header: t('inventory.cost'), value: (item) => item.cost },
+      { header: t('inventory.quantity'), value: (item) => item.quantity },
+      { header: t('inventory.minimumStock'), value: (item) => item.minimumStock },
+      {
+        header: t('inventory.status'),
+        value: (item) => (item.isActive ? t('inventory.active') : t('inventory.inactive')),
+      },
+    ]
+    downloadCsv(datedFilename('inventory'), sorted, exportColumns)
+  }
 
   function confirmDelete() {
     if (!deleting) return
@@ -155,10 +175,16 @@ export function InventoryPage() {
       <PageHeader
         title={t('nav.inventory')}
         actions={
-          <Button onClick={() => setEditing('new')}>
-            <Plus className="size-5" />
-            {t('inventory.addItem')}
-          </Button>
+          <>
+            <Button variant="secondary" disabled={sorted.length === 0} onClick={exportCsv}>
+              <Download className="size-5" />
+              {t('common.exportCsv')}
+            </Button>
+            <Button onClick={() => setEditing('new')}>
+              <Plus className="size-5" />
+              {t('inventory.addItem')}
+            </Button>
+          </>
         }
       />
 

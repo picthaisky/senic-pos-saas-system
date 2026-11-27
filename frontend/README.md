@@ -64,6 +64,32 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 ทดสอบได้ในโหมด mock: เปิด DevTools → Network → Offline แล้วลองขายในหน้า POS
 ส่วน service worker (เปิดแอปได้โดยไม่มีเน็ต, ปุ่มติดตั้งแอป) ต้องทดสอบด้วย `npm run build && npm run preview`
 
+## การแจ้งเตือนแบบ real-time และการส่งออกข้อมูล
+
+- **Real-time**: เมื่อ login กับ backend จริง แอปจะต่อ SignalR ที่ `/hubs/notifications`
+  การขายใหม่ทำให้ตัวเลขในหน้า Dashboard และ Inventory อัปเดตเอง และมีข้อความแจ้งเมื่อสินค้าถึงจุดสั่งซื้อ
+  (เฉพาะ Admin และ Owner) โค้ดอยู่ที่ `src/app/realtime.ts` โหมด mock ไม่มี hub จึงไม่ทำงานในโหมดนั้น
+- **Push notification**: Admin และ Owner จะเห็นปุ่มกระดิ่งบนแถบด้านบน กดเพื่อให้เครื่องนี้ได้รับแจ้งเมื่อสินค้าถึงจุดสั่งซื้อ
+  แม้ปิดแอปอยู่ แอปยกเลิกให้เองเมื่อออกจากระบบ ปุ่มจะแสดงเฉพาะเมื่อใช้ได้จริง คือ build แบบ production
+  (`npm run build && npm run preview` เพราะต้องมี service worker), เปิดผ่าน HTTPS หรือ localhost,
+  และ backend ตั้งค่า push ไว้ โค้ดอยู่ที่ `src/lib/push.ts` และ `public/push-sw.js`
+- **ส่งออก CSV**: ปุ่ม "ส่งออก CSV" ในหน้า Inventory (ทุกแถวที่ตรงกับตัวกรอง ไม่ใช่เฉพาะหน้าที่เห็น) และหน้า Customers
+  ไฟล์เปิดใน Excel ได้โดยตรงและอ่านภาษาไทยถูกต้อง โค้ดอยู่ที่ `src/lib/export-csv.ts`
+
+## Test ในเบราว์เซอร์จริง (end-to-end)
+
+`npm test` รันใน jsdom กับ API จำลอง ส่วน `npm run e2e` เปิดเบราว์เซอร์จริงด้วย Playwright กับ stack จริง (web, api, postgres)
+ครอบคลุม login, การขาย, การขายออฟไลน์แล้วส่งบิล, การอัปเดตข้ามหน้าต่างแบบ real-time และภาษา/โหมดมืด/จอมือถือ
+
+```bash
+npx playwright install chromium     # ครั้งแรกเท่านั้น
+E2E_URL=http://localhost:8080 E2E_TENANT_ID=... E2E_EMAIL=... E2E_PASSWORD=... npm run e2e
+```
+
+- ใช้บัญชี Owner ของ stack ทดสอบเท่านั้น เพราะ test สร้างสินค้าและบิลจริง วิธีรัน stack ในเครื่องอยู่ใน `../deploy/README.md`
+- ตั้ง `E2E_SCREENSHOTS=<โฟลเดอร์>` เพื่อเก็บภาพของแต่ละหน้าจอไว้ให้คนตรวจ
+- `node scripts/check-realtime.mjs` ตรวจการแจ้งเตือนผ่าน WebSocket โดยไม่ต้องเปิดเบราว์เซอร์ (ใช้ตัวแปร `SMOKE_*` ชุดเดียวกับ smoke test)
+
 ## โครงสร้าง
 
 ```text

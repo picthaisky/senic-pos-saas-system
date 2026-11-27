@@ -30,6 +30,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -72,6 +73,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Customer>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<User>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<PushSubscription>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         // OrderItem has no TenantId of its own; it follows its order.
         modelBuilder.Entity<OrderItem>().HasQueryFilter(e => CurrentTenantId == null || e.Order!.TenantId == CurrentTenantId);
 
@@ -130,6 +132,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Cost).HasPrecision(18, 2);
             entity.Property(e => e.Category).HasMaxLength(100);
             entity.Property(e => e.ImageUrl).HasMaxLength(500);
+            // Guards the stock level against simultaneous sales.
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         // Configure Customer entity
@@ -144,6 +148,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(200);
             entity.Property(e => e.Phone).HasMaxLength(20);
             entity.Property(e => e.Address).HasMaxLength(500);
+            // Guards the loyalty balance against simultaneous redemptions.
+            entity.Property(e => e.RowVersion).IsRowVersion();
         });
 
         // Configure Subscription entity
@@ -180,6 +186,24 @@ public class ApplicationDbContext : DbContext
         });
         // A token is only reachable through its user, so it follows the user's tenant filter.
         modelBuilder.Entity<RefreshToken>().HasQueryFilter(e => CurrentTenantId == null || e.User!.TenantId == CurrentTenantId);
+
+        // Configure PushSubscription entity
+        modelBuilder.Entity<PushSubscription>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            // One row per browser, whoever is signed in on it.
+            entity.HasIndex(e => e.Endpoint).IsUnique();
+            entity.HasIndex(e => e.TenantId);
+            entity.Property(e => e.Endpoint).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.P256dh).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Auth).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Language).HasMaxLength(5).IsRequired();
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // Configure LoyaltyTransaction entity
         modelBuilder.Entity<LoyaltyTransaction>(entity =>

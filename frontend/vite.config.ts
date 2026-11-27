@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           navigateFallbackDenylist: [/^\/api\//, /^\/hubs\//],
+          // Adds the push and notification-click handlers (public/push-sw.js).
+          importScripts: ['push-sw.js'],
         },
       }),
     ],
@@ -58,6 +60,10 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
+      // Playwright's end-to-end specs live in e2e/ and run with `npm run e2e`, not Vitest.
+      exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+      // Room for several 5s waits (see asyncUtilTimeout in the setup file) within one test.
+      testTimeout: 20_000,
       alias: {
         'virtual:pwa-register/react': fileURLToPath(
           new URL('./src/test/pwa-register-stub.ts', import.meta.url),

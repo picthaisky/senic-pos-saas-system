@@ -32,7 +32,11 @@ public class ApiFactory : WebApplicationFactory<Program>
     };
 
     private readonly string _databaseName = $"api-tests-{Guid.NewGuid()}";
-    private bool _seeded;
+    private readonly object _seedLock = new();
+    private Task? _seeding;
+
+    /// <summary>Stands in for the Web Push sender: records what would have been sent.</summary>
+    public FakePushSender Push { get; } = new();
 
     public ApiFactory()
     {
@@ -44,10 +48,12 @@ public class ApiFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("Jwt:Key", "integration-test-signing-key-0123456789abcdef");
+        builder.UseSetting("LoginProtection:RequestsPerMinutePerIp", "100000");
+        ConfigureSettings(builder);
 
         builder.ConfigureServices(services =>
         {
-            // Swap PostgreSQL for the in-memory provider.
+            // Replace the configured database with the one this factory tests against.
             var registered = services
                 .Where(d => d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>) ||
                             d.ServiceType == typeof(IDbContextOptionsConfiguration<ApplicationDbContext>))
@@ -55,25 +61,51 @@ public class ApiFactory : WebApplicationFactory<Program>
             foreach (var descriptor in registered)
                 services.Remove(descriptor);
 
-            services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+            services.AddDbContext<ApplicationDbContext>(ConfigureDatabase);
+
+            // Record push notifications instead of calling real push services.
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IPushSender)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton<IPushSender>(Push);
         });
     }
+
+    /// <summary>Extra configuration for a specialised factory.</summary>
+    protected virtual void ConfigureSettings(IWebHostBuilder builder)
+    {
+    }
+
+    /// <summary>
+    /// Which database the API under test uses. In-memory by default: fast, but it enforces no
+    /// unique indexes and has no real concurrency, so <see cref="PostgresApiFactory"/> overrides it.
+    /// </summary>
+    protected virtual void ConfigureDatabase(DbContextOptionsBuilder options) =>
+        options.UseInMemoryDatabase(_databaseName);
+
+    /// <summary>Runs once before the test users are created, e.g. to apply migrations.</summary>
+    protected virtual Task PrepareDatabaseAsync(ApplicationDbContext db) => Task.CompletedTask;
 
     /// <summary>Runs <paramref name="action"/> against the database with no tenant filter (no signed-in user).</summary>
     public async Task WithDbAsync(Func<ApplicationDbContext, Task> action)
     {
+        await EnsureSeededAsync();
         using var scope = Services.CreateScope();
         await action(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
     }
 
-    private async Task EnsureSeededAsync()
+    /// <summary>Prepares the database and creates the test users, once per factory.</summary>
+    private Task EnsureSeededAsync()
     {
-        if (_seeded) return;
-        _seeded = true;
+        lock (_seedLock)
+            return _seeding ??= SeedAsync();
+    }
 
+    private async Task SeedAsync()
+    {
         using var scope = Services.CreateScope();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await PrepareDatabaseAsync(db);
         var hash = hasher.Hash(Password);
 
         void AddUser(Guid tenantId, string email, UserRole role) => db.Users.Add(new User

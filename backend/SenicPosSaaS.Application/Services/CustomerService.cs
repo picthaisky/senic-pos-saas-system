@@ -140,11 +140,21 @@ public class CustomerService : ICustomerService
             });
     }
 
-    private async Task<CustomerDto?> ChangePointsAsync(Guid customerId, LoyaltyTransactionType type, int points, string description, CancellationToken cancellationToken)
+    private Task<CustomerDto?> ChangePointsAsync(Guid customerId, LoyaltyTransactionType type, int points, string description, CancellationToken cancellationToken)
     {
         if (points <= 0)
             throw new ArgumentOutOfRangeException(nameof(points), "Points must be greater than zero.");
 
+        // Repeated from the fresh balance when another till changed it in the meantime, so two
+        // redemptions can never both spend the same points.
+        return ConcurrencyRetry.RunAsync(
+            () => ChangePointsOnceAsync(customerId, type, points, description, cancellationToken),
+            _repository.DiscardChanges,
+            "The points could not be updated because the balance is changing. Please try again.");
+    }
+
+    private async Task<CustomerDto?> ChangePointsOnceAsync(Guid customerId, LoyaltyTransactionType type, int points, string description, CancellationToken cancellationToken)
+    {
         var customer = await _repository.GetByIdAsync(customerId, cancellationToken);
         if (customer == null) return null;
 

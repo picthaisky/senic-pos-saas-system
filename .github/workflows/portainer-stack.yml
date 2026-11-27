@@ -1,0 +1,58 @@
+name: Create Portainer stack
+
+# Run once, by hand, to create the Git-based stack in Portainer. After that, deploy.yml keeps
+# it up to date. Creating the stack in the Portainer UI instead works just as well; both ways
+# are described in deploy/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to start with (the images must already exist on GHCR)
+        default: latest
+        required: true
+      enable_webhook:
+        description: Also create a GitOps webhook (only needed to deploy without an API key)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    name: Create stack
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Create the stack from this repository
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID }}
+          PORTAINER_STACK_NAME: ${{ vars.PORTAINER_STACK_NAME }}
+          PORTAINER_ENABLE_WEBHOOK: ${{ inputs.enable_webhook }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          REPO_REF: refs/heads/main
+          COMPOSE_PATH: deploy/docker-compose.yml
+          # Only for a private repository: a token Portainer can read the repository with.
+          GIT_USERNAME: ${{ vars.PORTAINER_GIT_USERNAME }}
+          GIT_TOKEN: ${{ secrets.PORTAINER_GIT_TOKEN }}
+          # Variables of the stack (deploy/docker-compose.yml).
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          WEB_PORT: ${{ vars.WEB_PORT }}
+          BUSINESS_TIMEZONE: ${{ vars.BUSINESS_TIMEZONE }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+          BOOTSTRAP_TENANT_ID: ${{ vars.BOOTSTRAP_TENANT_ID }}
+          BOOTSTRAP_OWNER_EMAIL: ${{ vars.BOOTSTRAP_OWNER_EMAIL }}
+          BOOTSTRAP_OWNER_PASSWORD: ${{ secrets.BOOTSTRAP_OWNER_PASSWORD }}
+          PUSH_PUBLIC_KEY: ${{ vars.PUSH_PUBLIC_KEY }}
+          PUSH_PRIVATE_KEY: ${{ secrets.PUSH_PRIVATE_KEY }}
+          PUSH_SUBJECT: ${{ vars.PUSH_SUBJECT }}
+        run: node deploy/portainer.mjs create

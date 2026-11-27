@@ -9,7 +9,7 @@ import { INVENTORY_KEY } from '@/features/inventory/api'
 import { errorMessage } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { toast } from '@/stores/toast'
-import { cartTotals, TAX_RATE, useCartStore } from '../cart-store'
+import { cartTotals, TAX_PERCENT, useCartStore } from '../cart-store'
 import { type SaleResult, submitSale } from '../offline/queue'
 import { PAYMENT_METHODS, type PaymentMethod } from '../types'
 
@@ -143,7 +143,7 @@ export function CartPanel() {
             <dd>{formatCurrency(totals.subtotal)}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-muted">{t('pos.tax', { rate: TAX_RATE * 100 })}</dt>
+            <dt className="text-muted">{t('pos.tax', { rate: TAX_PERCENT })}</dt>
             <dd>{formatCurrency(totals.tax)}</dd>
           </div>
           <div className="mt-1 flex justify-between border-t border-border pt-2 text-xl font-semibold">
@@ -217,7 +217,7 @@ export function CartPanel() {
             <dd className="text-right font-medium">{receipt.order.orderNumber}</dd>
             <dt className="text-muted">{t('pos.paymentMethod')}</dt>
             <dd className="text-right">{t(`payment.${receipt.order.paymentMethod}`)}</dd>
-            <dt className="text-muted">{t('pos.tax', { rate: TAX_RATE * 100 })}</dt>
+            <dt className="text-muted">{t('pos.tax', { rate: TAX_PERCENT })}</dt>
             <dd className="text-right">{formatCurrency(receipt.order.taxAmount)}</dd>
             <dt className="text-lg font-semibold">{t('pos.total')}</dt>
             <dd className="text-right text-lg font-semibold">

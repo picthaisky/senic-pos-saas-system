@@ -29,6 +29,8 @@ interface AuthState {
    * Null while authenticated means an offline session (see `resumeOffline`).
    */
   accessToken: string | null
+  /** When the access token expires, in ms since the epoch; null when unknown or absent. */
+  accessTokenExpiresAt: number | null
   setSession: (session: AuthSession) => void
   clearSession: () => void
   /**
@@ -57,18 +59,24 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: 'loading',
   user: null,
   accessToken: null,
-  setSession: ({ accessToken, user }) => {
+  accessTokenExpiresAt: null,
+  setSession: ({ accessToken, expiresAt, user }) => {
     localStorage.setItem(USER_KEY, JSON.stringify(user))
-    set({ status: 'authenticated', accessToken, user })
+    set({
+      status: 'authenticated',
+      accessToken,
+      accessTokenExpiresAt: Date.parse(expiresAt) || null,
+      user,
+    })
   },
   clearSession: () => {
     localStorage.removeItem(USER_KEY)
-    set({ status: 'anonymous', accessToken: null, user: null })
+    set({ status: 'anonymous', accessToken: null, accessTokenExpiresAt: null, user: null })
   },
   resumeOffline: () => {
     const user = readStoredUser()
     if (!user) return false
-    set({ status: 'authenticated', accessToken: null, user })
+    set({ status: 'authenticated', accessToken: null, accessTokenExpiresAt: null, user })
     return true
   },
 }))

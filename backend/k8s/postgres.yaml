@@ -4,7 +4,6 @@ metadata:
   name: senicpos-api-config
   namespace: senicpos
 data:
-  UsePostgreSQL: "true"
   ASPNETCORE_ENVIRONMENT: "Production"
 ---
 apiVersion: v1
