@@ -171,22 +171,43 @@ Edit `SenicPosSaaS.API/appsettings.json`:
 }
 ```
 
-3. **Run migrations**
+3. **Run the application**
 ```bash
 cd SenicPosSaaS.API
-dotnet ef migrations add InitialCreate --project ../SenicPosSaaS.Infrastructure
-dotnet ef database update --project ../SenicPosSaaS.Infrastructure
-```
-
-4. **Run the application**
-```bash
 dotnet run
 ```
 
+In the Development environment the API applies the EF Core migrations and seeds demo data on
+startup, so there is no separate migration step. To apply migrations yourself (any other
+environment):
+```bash
+dotnet ef database update --project SenicPosSaaS.Infrastructure --startup-project SenicPosSaaS.API
+```
+After changing an entity, add a migration with
+`dotnet ef migrations add <Name> --project SenicPosSaaS.Infrastructure`.
+Migrations target PostgreSQL; the SQL Server option has none yet.
+
 The API will be available at:
-- HTTP: `http://localhost:5000`
-- HTTPS: `https://localhost:5001`
-- Swagger UI: `http://localhost:5000/swagger`
+- `dotnet run`: `http://localhost:5247` (Swagger UI at `/swagger`)
+- `docker-compose up`: `http://localhost:5000`
+
+4. **Sign in**
+
+Every endpoint except `/health` and `/api/auth/*` needs an access token. The Development seed
+creates one user per role in the demo tenant `11111111-1111-1111-1111-111111111111`:
+`admin@demo.test`, `owner@demo.test`, `cashier@demo.test` and `viewer@demo.test`.
+Their password is the `Seed:DemoPassword` value in `SenicPosSaaS.API/appsettings.Development.json`.
+
+In Swagger UI call `POST /api/auth/login`, copy `accessToken` from the response and paste it
+into **Authorize**.
+
+5. **Configuration outside Development**
+
+| Setting | Purpose |
+| --- | --- |
+| `Jwt__Key` | Signing key for access tokens, at least 32 characters. Required: the API refuses to start without it. |
+| `Cors__AllowedOrigins__0` | Origin of the frontend when it is served from a different origin than the API. |
+| `Business__TimeZone` | Time zone used for report days and date filters. Default `Asia/Bangkok`. |
 
 ### Docker Deployment
 
@@ -233,34 +254,19 @@ kubectl get services -n senicpos
 
 ## 📡 API Endpoints
 
-### Orders
-- `POST /api/orders` - Create new order
-- `GET /api/orders/{id}` - Get order by ID
-- `GET /api/orders/tenant/{tenantId}` - Get all orders for tenant
-- `POST /api/orders/{id}/cancel` - Cancel order
+The full contract (request and response shapes, roles, status codes) is in
+[`docs/API_REFERENCE.md`](../docs/API_REFERENCE.md). The tenant always comes from the access
+token, never from the URL or the request body.
 
-### Inventory
-- `POST /api/inventory` - Create inventory item
-- `GET /api/inventory/{id}` - Get item by ID
-- `GET /api/inventory/tenant/{tenantId}` - Get all items for tenant
-- `PUT /api/inventory/{id}` - Update item
-- `DELETE /api/inventory/{id}` - Delete item
-- `GET /api/inventory/tenant/{tenantId}/low-stock` - Get low stock items
-
-### Customers
-- `POST /api/customers` - Create customer
-- `GET /api/customers/{id}` - Get customer by ID
-- `GET /api/customers/tenant/{tenantId}` - Get all customers for tenant
-- `POST /api/customers/{id}/loyalty-points` - Add loyalty points
-
-### Subscriptions
-- `POST /api/subscriptions` - Create subscription
-- `GET /api/subscriptions/tenant/{tenantId}` - Get subscription by tenant
-- `POST /api/subscriptions/tenant/{tenantId}/renew` - Renew subscription
-- `GET /api/subscriptions/expiring?daysBeforeExpiry=30` - Get expiring subscriptions
-
-### Health
-- `GET /health` - Health check endpoint
+| Area | Endpoints |
+| --- | --- |
+| Auth | `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me` |
+| Inventory | `GET /api/inventory`, `GET /api/inventory/{id}`, `GET /api/inventory/barcode/{barcode}`, `GET /api/inventory/low-stock`, `POST`, `PUT /{id}`, `DELETE /{id}` |
+| Customers | `GET /api/customers`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`, `GET /{id}/loyalty`, `POST /{id}/loyalty/earn`, `POST /{id}/loyalty/redeem` |
+| Orders | `GET /api/orders`, `GET /{id}`, `POST`, `POST /{id}/cancel` |
+| Dashboard | `GET /api/dashboard/summary` |
+| Subscriptions | `GET /api/subscriptions/current`, `POST /api/subscriptions/current/renew`, `POST /api/subscriptions`, `GET /api/subscriptions/expiring` |
+| Health | `GET /health` (no sign-in) |
 
 ## 🧪 Testing
 
@@ -276,22 +282,32 @@ dotnet test --collect:"XPlat Code Coverage"
 
 ## 📝 Sample API Requests
 
-### Create Order
+### Sign in
 ```bash
-POST /api/orders
+POST /api/auth/login
 Content-Type: application/json
 
 {
   "tenantId": "11111111-1111-1111-1111-111111111111",
-  "customerId": "customer-guid-here",
-  "paymentMethod": 0,
-  "discountAmount": 10.00,
+  "email": "cashier@demo.test",
+  "password": "<Seed:DemoPassword>"
+}
+```
+The response body carries `accessToken`; the refresh token is set as an HttpOnly cookie.
+
+### Create Order
+```bash
+POST /api/orders
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{
+  "customerId": null,
+  "paymentMethod": "Cash",
+  "discountAmount": 0,
+  "clientOrderId": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
   "items": [
-    {
-      "inventoryItemId": "item-guid-here",
-      "quantity": 2,
-      "discount": 5.00
-    }
+    { "inventoryItemId": "item-guid-here", "quantity": 2, "discount": 0 }
   ]
 }
 ```
@@ -299,19 +315,18 @@ Content-Type: application/json
 ### Create Inventory Item
 ```bash
 POST /api/inventory
+Authorization: Bearer <accessToken>
 Content-Type: application/json
 
 {
-  "tenantId": "11111111-1111-1111-1111-111111111111",
-  "sku": "FOOD-001",
-  "name": "Pad Thai",
-  "description": "Traditional Thai stir-fried noodles",
-  "barcode": "8850999320014",
-  "price": 120.00,
-  "cost": 50.00,
+  "sku": "DRINK-002",
+  "name": "Lemon Soda",
+  "barcode": "8850999320052",
+  "price": 35,
+  "cost": 12,
   "quantity": 100,
   "minimumStock": 20,
-  "category": "Main Course"
+  "category": "Beverage"
 }
 ```
 

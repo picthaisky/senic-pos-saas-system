@@ -28,16 +28,25 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 | `npm run lint`    | oxlint                                              |
 | `npm run format`  | Prettier                                            |
 
-## โหมดจำลอง (mock)
+## ใช้กับ backend จริง หรือโหมดจำลอง (mock)
 
-Backend ยังไม่ได้ทำตาม API contract (`../docs/API_REFERENCE.md`) ดังนั้น `.env.development` ตั้ง
-`VITE_USE_MOCKS=true` ไว้ เพื่อให้ `src/mocks/` ตอบทุก endpoint ใน contract แทนจากข้อมูลตัวอย่างใน memory
+`.env.development` ตั้ง `VITE_USE_MOCKS=true` ไว้ เพื่อให้เปิดหน้าจอได้โดยไม่ต้องรัน backend
+โดย `src/mocks/` จะตอบทุก endpoint ใน contract จากข้อมูลตัวอย่างใน memory
+
+**โหมดจำลอง** (`VITE_USE_MOCKS=true`)
 
 - Login ด้วยรหัสร้าน อีเมล และรหัสผ่านใดก็ได้ (รหัสผ่านอย่างน้อย 6 ตัวอักษร)
 - ขึ้นต้นอีเมลด้วย `admin@`, `cashier@` หรือ `viewer@` เพื่อทดสอบแต่ละ role อีเมลอื่นได้ role Owner
-- ข้อมูลที่เพิ่ม แก้ หรือขาย จะหายเมื่อ reload หน้า
-- Mock ไม่ตรวจ role ฝั่ง API การกันสิทธิ์ที่เห็นมาจาก route guard ของ frontend เท่านั้น
-- เมื่อ backend พร้อมแล้วให้ตั้งเป็น `false` โหมดนี้ไม่ถูกรวมใน production build
+- ข้อมูลที่เพิ่ม แก้ หรือขาย จะหายเมื่อ reload หน้า และ mock ไม่ตรวจ role ฝั่ง API
+
+**Backend จริง** (`VITE_USE_MOCKS=false`)
+
+1. รัน backend ตาม `../backend/README.md` (ต้องมี PostgreSQL)
+2. ตั้ง `VITE_USE_MOCKS=false` และ `VITE_PROXY_TARGET` ให้ตรงกับ port ของ backend แล้วรัน `npm run dev` ใหม่
+3. Login ด้วยรหัสร้าน `11111111-1111-1111-1111-111111111111` และผู้ใช้ทดสอบ เช่น `owner@demo.test`
+   รหัสผ่านอยู่ที่ `Seed:DemoPassword` ใน `../backend/SenicPosSaaS.API/appsettings.Development.json`
+
+โหมดจำลองไม่ถูกรวมใน production build
 
 ## โครงสร้าง
 

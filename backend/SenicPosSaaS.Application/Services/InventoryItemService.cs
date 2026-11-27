@@ -1,3 +1,4 @@
+using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.DTOs.InventoryItem;
 using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Domain.Entities;
@@ -16,6 +17,20 @@ public class InventoryItemService : IInventoryItemService
 
     public async Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemDto dto, CancellationToken cancellationToken = default)
     {
+        // Checked here so the caller gets a clear 409 instead of a database constraint error.
+        var barcode = string.IsNullOrWhiteSpace(dto.Barcode) ? null : dto.Barcode.Trim();
+        var clashes = await _repository.FindAsync(
+            i => i.TenantId == dto.TenantId && (i.Sku == dto.Sku || (barcode != null && i.Barcode == barcode)),
+            cancellationToken);
+        var clash = clashes?.FirstOrDefault();
+        if (clash != null)
+        {
+            throw new ConflictException(clash.Sku == dto.Sku
+                ? $"SKU {dto.Sku} already exists."
+                : $"Barcode {barcode} is already used by {clash.Name}.");
+        }
+        dto.Barcode = barcode;
+
         var item = new InventoryItem
         {
             Id = Guid.NewGuid(),
@@ -50,6 +65,18 @@ public class InventoryItemService : IInventoryItemService
     {
         var items = await _repository.GetItemsByTenantIdAsync(tenantId, cancellationToken);
         return items.Select(MapToDto);
+    }
+
+    public async Task<IEnumerable<InventoryItemDto>> SearchInventoryItemsAsync(Guid tenantId, string? search, string? category, bool? isActive, bool lowStockOnly, CancellationToken cancellationToken = default)
+    {
+        var items = await _repository.SearchAsync(tenantId, search, category, isActive, lowStockOnly, cancellationToken);
+        return items.Select(MapToDto);
+    }
+
+    public async Task<InventoryItemDto?> GetInventoryItemByBarcodeAsync(Guid tenantId, string barcode, CancellationToken cancellationToken = default)
+    {
+        var item = await _repository.GetByBarcodeAsync(barcode.Trim(), tenantId, cancellationToken);
+        return item != null ? MapToDto(item) : null;
     }
 
     public async Task<InventoryItemDto?> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemDto dto, CancellationToken cancellationToken = default)

@@ -1,29 +1,28 @@
 # API Contract v1 – Senic POS
 
 เอกสารนี้เป็นข้อตกลงระหว่าง frontend (React, `frontend-react/`) กับ backend (.NET, `backend/`)
-คอลัมน์ **สถานะ** บอกว่า backend ปัจจุบันต้องทำอะไรเพื่อให้ตรงตาม contract นี้
+Backend ทำตาม contract นี้ครบแล้ว และมี integration test กำกับใน `backend/SenicPosSaaS.Tests/Api/`
 
-- ✅ มีแล้ว ใช้ได้ทันที
-- ✏️ มีแล้ว แต่ต้องแก้
-- ➕ ยังไม่มี ต้องเพิ่ม
+- ✅ ใช้ได้แล้ว
+- ⏳ ยังไม่ได้ทำ
 
 ## 1. ข้อตกลงร่วม
 
-| เรื่อง           | ข้อตกลง                                                                                                    | สถานะ backend                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                   | ✅                                               |
-| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                              | ✅                                               |
-| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                  | ✏️ ตอนนี้เป็นตัวเลข ต้องเพิ่ม `JsonStringEnumConverter` |
-| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                   | ✅                                               |
-| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                 | ✏️ ตอนนี้รับจาก URL และ body                        |
-| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health` | ➕ ยังไม่มี JWT                                     |
-| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`)                                         | ✏️ ต้องตรวจให้ทุก controller คืนรูปแบบเดียวกัน          |
-| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                     | ✏️ ตอนนี้เป็น `AllowAnyOrigin`                      |
+| เรื่อง           | ข้อตกลง                                                                                                    | สถานะ backend |
+| -------------- | --------------------------------------------------------------------------------------------------------- | ------------- |
+| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                   | ✅            |
+| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                              | ✅            |
+| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                  | ✅            |
+| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                   | ✅            |
+| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                 | ✅            |
+| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health` | ✅            |
+| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`)                                         | ✅            |
+| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                     | ✅            |
 
 Status code ที่ frontend จัดการ: `400` (validation, แสดงใต้ field จาก `errors`), `401` (ลอง refresh 1 ครั้ง
 ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ)
 
-## 2. Authentication ➕
+## 2. Authentication
 
 Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 
@@ -49,19 +48,18 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 - Access token อายุ 15 นาที มี claim `sub`, `tenantId`, `role` frontend เก็บไว้ใน memory เท่านั้น
 - Refresh token อายุ 7 วัน ส่งเป็น cookie `HttpOnly; Secure; SameSite=Strict; Path=/api/auth`
   และหมุน (rotate) ทุกครั้งที่เรียก `/refresh` frontend ไม่เห็นค่า token นี้
-- ต้องเพิ่ม entity `User` (email, passwordHash, name, role, tenantId) และ seed ผู้ใช้ทดสอบ
 
 ## 3. Inventory
 
-| Method | Path                                                   | Role         | สถานะ                                                                               |
-| ------ | ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------- |
-| GET    | `/api/inventory?search=&category=&isActive=&lowStock=` | ทุก role      | ✏️ แทน `GET /tenant/{tenantId}` และเพิ่ม filter                                       |
-| GET    | `/api/inventory/{id}`                                  | ทุก role      | ✅                                                                                  |
-| GET    | `/api/inventory/barcode/{barcode}`                     | ทุก role      | ➕ repository มี `GetByBarcodeAsync` แล้ว เหลือ service และ controller คืน `404` ถ้าไม่พบ |
-| GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✏️ แทน `GET /tenant/{tenantId}/low-stock`                                           |
-| POST   | `/api/inventory`                                       | Admin, Owner | ✏️ เอา `tenantId` ออกจาก body                                                       |
-| PUT    | `/api/inventory/{id}`                                  | Admin, Owner | ✅                                                                                  |
-| DELETE | `/api/inventory/{id}`                                  | Admin, Owner | ✅                                                                                  |
+| Method | Path                                                   | Role         | สถานะ |
+| ------ | ------------------------------------------------------ | ------------ | ----- |
+| GET    | `/api/inventory?search=&category=&isActive=&lowStock=` | ทุก role      | ✅    |
+| GET    | `/api/inventory/{id}`                                  | ทุก role      | ✅    |
+| GET    | `/api/inventory/barcode/{barcode}`                     | ทุก role      | ✅    |
+| GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✅    |
+| POST   | `/api/inventory`                                       | Admin, Owner | ✅    |
+| PUT    | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
+| DELETE | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 
 ```jsonc
 // InventoryItem
@@ -86,16 +84,16 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 ## 4. Customers
 
-| Method | Path                                 | Role                  | สถานะ                                                  |
-| ------ | ------------------------------------ | --------------------- | ------------------------------------------------------ |
-| GET    | `/api/customers?search=`             | ทุก role               | ✏️ แทน `GET /tenant/{tenantId}`                        |
-| GET    | `/api/customers/{id}`                | ทุก role               | ✅                                                     |
-| POST   | `/api/customers`                     | Admin, Owner, Cashier | ✏️ เอา `tenantId` ออกจาก body, `email` ไม่บังคับ          |
-| PUT    | `/api/customers/{id}`                | Admin, Owner          | ➕                                                     |
-| DELETE | `/api/customers/{id}`                | Admin, Owner          | ➕                                                     |
-| GET    | `/api/customers/{id}/loyalty`        | ทุก role               | ➕ ประวัติแต้ม ต้องเพิ่ม entity `LoyaltyTransaction`         |
-| POST   | `/api/customers/{id}/loyalty/earn`   | Admin, Owner, Cashier | ✏️ แทน `POST /{id}/loyalty-points` และรับ `description` |
-| POST   | `/api/customers/{id}/loyalty/redeem` | Admin, Owner, Cashier | ➕ คืน `409` ถ้าแต้มไม่พอ                                  |
+| Method | Path                                 | Role                  | สถานะ |
+| ------ | ------------------------------------ | --------------------- | ----- |
+| GET    | `/api/customers?search=`             | ทุก role               | ✅    |
+| GET    | `/api/customers/{id}`                | ทุก role               | ✅    |
+| POST   | `/api/customers`                     | Admin, Owner, Cashier | ✅    |
+| PUT    | `/api/customers/{id}`                | Admin, Owner          | ✅    |
+| DELETE | `/api/customers/{id}`                | Admin, Owner          | ✅    |
+| GET    | `/api/customers/{id}/loyalty`        | ทุก role               | ✅    |
+| POST   | `/api/customers/{id}/loyalty/earn`   | Admin, Owner, Cashier | ✅    |
+| POST   | `/api/customers/{id}/loyalty/redeem` | Admin, Owner, Cashier | ✅    |
 
 ```jsonc
 // Customer
@@ -118,13 +116,13 @@ Frontend เปลี่ยนมาใช้ `firstName` และ `lastName` (
 
 ## 5. Orders
 
-| Method | Path                            | Role                  | สถานะ                                       |
-| ------ | ------------------------------- | --------------------- | ------------------------------------------- |
-| GET    | `/api/orders?from=&to=&status=` | Admin, Owner, Viewer  | ✏️ แทน `GET /tenant/{tenantId}`             |
-| GET    | `/api/orders/{id}`              | ทุก role               | ✅                                          |
-| POST   | `/api/orders`                   | Admin, Owner, Cashier | ✏️ ดูด้านล่าง                                  |
-| POST   | `/api/orders/{id}/cancel`       | Admin, Owner          | ✅                                          |
-| GET    | `/api/orders/{id}/receipt`      | ทุก role               | ➕ คืน `application/pdf` (เลื่อนไปทำหลัง v1 ได้) |
+| Method | Path                            | Role                  | สถานะ                            |
+| ------ | ------------------------------- | --------------------- | -------------------------------- |
+| GET    | `/api/orders?from=&to=&status=` | Admin, Owner, Viewer  | ✅                               |
+| GET    | `/api/orders/{id}`              | ทุก role               | ✅                               |
+| POST   | `/api/orders`                   | Admin, Owner, Cashier | ✅                               |
+| POST   | `/api/orders/{id}/cancel`       | Admin, Owner          | ✅                               |
+| GET    | `/api/orders/{id}/receipt`      | ทุก role               | ⏳ ยังไม่ได้ทำ คืน `application/pdf` |
 
 ```jsonc
 // POST /api/orders  request
@@ -147,16 +145,16 @@ Frontend เปลี่ยนมาใช้ `firstName` และ `lastName` (
 }
 ```
 
-สิ่งที่ backend ต้องแก้ใน `POST /api/orders`
+พฤติกรรมของ `POST /api/orders`
 
-- เอา `tenantId` ออกจาก body
-- `customerId` ต้องเป็น nullable (ตอนนี้เป็น `Guid` บังคับ จึงขายให้ลูกค้าทั่วไปไม่ได้)
-- รับ `clientOrderId` และคืน order เดิมถ้าเคยรับค่านี้แล้ว (idempotent)
+- `customerId` เป็น `null` ได้ สำหรับลูกค้าทั่วไป
+- ส่ง `clientOrderId` เดิมซ้ำจะได้ order เดิมกลับมา ไม่สร้างใหม่และไม่ตัดสต็อกซ้ำ
+- สต็อกไม่พอคืน `409` และไม่ตัดสต็อกของรายการใดในบิลนั้น
 
 Frontend เปลี่ยนมาใช้ชื่อ field ของ backend: `totalAmount`, `netAmount`, `discountAmount`, `itemName`,
 `unitPrice` ยอดเงินทุกตัวให้ยึดค่าที่ backend คำนวณ ตะกร้าใน frontend แสดงเป็นค่าประมาณเท่านั้น
 
-## 6. Dashboard ➕
+## 6. Dashboard
 
 | Method | Path                               | Role                 |
 | ------ | ---------------------------------- | -------------------- |
@@ -180,17 +178,17 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 }
 ```
 
-หน้า Dashboard เดิมใช้ mock data ทั้งหมด endpoint นี้ทำให้หน้าใหม่ใช้ข้อมูลจริงได้ด้วยการเรียกครั้งเดียว
+ค่าเริ่มต้นเมื่อไม่ส่ง `from` และ `to` คือ 7 วันล่าสุด ช่วงยาวสุดที่ขอได้คือ 366 วัน
 
 ## 7. Subscriptions และ Health
 
-| Method | Path                               | Role                | สถานะ                                  |
-| ------ | ---------------------------------- | ------------------- | -------------------------------------- |
-| GET    | `/api/subscriptions/current`       | Admin, Owner        | ✏️ แทน `GET /tenant/{tenantId}`        |
-| POST   | `/api/subscriptions/current/renew` | Owner               | ✏️ แทน `POST /tenant/{tenantId}/renew` |
-| POST   | `/api/subscriptions`               | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้                |
-| GET    | `/api/subscriptions/expiring`      | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้                |
-| GET    | `/health`                          | ไม่ต้อง login         | ✅                                     |
+| Method | Path                               | Role                | สถานะ                   |
+| ------ | ---------------------------------- | ------------------- | ----------------------- |
+| GET    | `/api/subscriptions/current`       | Admin, Owner        | ✅                      |
+| POST   | `/api/subscriptions/current/renew` | Owner               | ✅                      |
+| POST   | `/api/subscriptions`               | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้ |
+| GET    | `/api/subscriptions/expiring`      | ผู้ดูแลระบบ (platform) | ✅ ไม่ได้ใช้จาก frontend นี้ |
+| GET    | `/health`                          | ไม่ต้อง login         | ✅                      |
 
 Frontend เดิมยังไม่มีหน้า Subscription จึงไม่อยู่ในขอบเขตการย้ายรอบแรก
 
@@ -203,26 +201,29 @@ Frontend เดิมยังไม่มีหน้า Subscription จึง
 
 Vite dev server ตั้ง proxy ให้ `/api` และ `/hubs` ไว้แล้ว
 
-## 9. เรื่องที่ต้องตัดสินใจ
+## 9. รายละเอียดที่ควรรู้
 
-1. **สูตรภาษี** ตอนนี้สองฝั่งคำนวณไม่ตรงกัน
-   - Backend (`OrderService`): ภาษี = ยอดรวม × 7% แล้วค่อยหักส่วนลด
-   - Frontend เดิม (`cart.store.ts`): ภาษี = (ยอดรวม − ส่วนลด) × 7%
-   - ต้องยืนยันด้วยว่าราคาสินค้าที่บันทึกเป็นราคารวม VAT หรือยังไม่รวม
-2. **ที่เก็บ refresh token** เอกสารนี้เสนอ HttpOnly cookie ซึ่งกัน XSS ขโมย token ได้
-   ทางเลือกคือส่งใน body แล้วเก็บใน `localStorage` ซึ่งทำง่ายกว่าแต่ปลอดภัยน้อยกว่า
-3. **Pagination** v1 คืน array ทั้งหมดแล้วแบ่งหน้าที่ frontend เหมือนของเดิม
-   ถ้าร้านมีสินค้าหลักพันรายการขึ้นไปควรเปลี่ยนเป็นแบ่งหน้าที่ server
+- **Login สำหรับพัฒนา**: เมื่อรันใน Development ระบบ seed ผู้ใช้ `admin@demo.test`, `owner@demo.test`,
+  `cashier@demo.test` และ `viewer@demo.test` ใน tenant `11111111-1111-1111-1111-111111111111`
+  รหัสผ่านอยู่ที่ `Seed:DemoPassword` ใน `backend/SenicPosSaaS.API/appsettings.Development.json`
+- **Refresh token** อยู่ใน cookie `senic_refresh` (`HttpOnly; Secure; SameSite=Strict; Path=/api/auth`)
+  ใช้ได้ครั้งเดียว ทุกครั้งที่ refresh จะออก token ใหม่และยกเลิกตัวเดิม
+- **วันที่ใน `from` และ `to`** เป็นวันตามเวลาของร้าน กำหนดด้วย `Business:TimeZone` (ค่าเริ่มต้น `Asia/Bangkok`)
+  ทั้งสองวันนับรวมในช่วง และ `salesByDay` ของ Dashboard จัดกลุ่มตามเวลาเดียวกัน
+- **การขายถือว่าชำระแล้ว**: `POST /api/orders` สร้าง order สถานะ `Completed` ทันที Dashboard นับเฉพาะสถานะนี้
+- **ลบลูกค้า** เป็นการปิดการใช้งาน (soft delete) order เดิมของลูกค้ายังอยู่ครบ
+- **`PUT`** ทั้งของ inventory และ customers ข้าม field ที่ส่งเป็น `null` จึงยังล้างค่า field ให้ว่างไม่ได้
+- **`Jwt:Key`** ต้องตั้งเองนอก Development (เช่น environment variable `Jwt__Key`) ไม่เช่นนั้น API จะไม่ start
+- **`Cors:AllowedOrigins`** ต้องใส่ origin ของ frontend เมื่อ frontend กับ API อยู่คนละ origin
 
-## 10. งาน backend สำหรับ Phase 4
+## 10. เรื่องที่ยังเปิดอยู่
 
-เรียงตามลำดับที่ frontend ต้องใช้
-
-1. JWT authentication, entity `User`, `AuthController`, policy ตาม role
-2. อ่าน tenant จาก claim และเปลี่ยน path ที่มี `tenant/{tenantId}` ทั้งหมด
-3. `JsonStringEnumConverter`, CORS เฉพาะ origin, `ProblemDetails`
-4. Inventory: filter ใน list, endpoint barcode
-5. Orders: `customerId` nullable, `clientOrderId`, filter ใน list
-6. Customers: update, delete, `LoyaltyTransaction`, earn, redeem
-7. Dashboard summary
-8. Receipt PDF (เลื่อนได้)
+1. **สูตรภาษี** ยังเป็นของเดิม: ภาษี = ยอดรวมสินค้า × 7% (ปัดเป็น 2 ตำแหน่ง) แล้วค่อยหักส่วนลดท้ายบิล
+   ต้องยืนยันว่าควรคิดภาษีหลังหักส่วนลดหรือไม่ และราคาสินค้ารวม VAT แล้วหรือยัง
+2. **Endpoint ข้าม tenant ของ Subscriptions** (`POST /api/subscriptions`, `GET /api/subscriptions/expiring`)
+   ตอนนี้จำกัดที่ role `Admin` ของ tenant ใดก็ได้ ซึ่งยังเห็นข้อมูล subscription ของ tenant อื่น
+   ต้องแยกเป็นสิทธิ์ของผู้ดูแลแพลตฟอร์มก่อนใช้งานจริง
+3. **การจัดการผู้ใช้** ยังไม่มี endpoint สำหรับสร้างหรือแก้ไขผู้ใช้และเปลี่ยนรหัสผ่าน
+4. **Migration** สร้างสำหรับ PostgreSQL เท่านั้น ตัวเลือก SQL Server (`UsePostgreSQL=false`) ยังไม่มี migration
+5. **Pagination** ทุก list คืน array ทั้งหมด ควรแบ่งหน้าที่ server เมื่อข้อมูลมีหลักพันรายการ
+6. **Receipt PDF** (`GET /api/orders/{id}/receipt`) ยังไม่ได้ทำ

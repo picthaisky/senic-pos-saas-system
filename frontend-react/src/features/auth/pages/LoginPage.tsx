@@ -54,7 +54,9 @@ export function LoginPage() {
       localStorage.setItem(TENANT_KEY, tenantId.trim())
       setSession(session) // re-renders into the <Navigate> above
     } catch (err) {
-      setError(getStatus(err) === 401 ? t('auth.invalidCredentials') : t('common.error'))
+      // 400 = the tenant id or email is malformed; to the user that is the same mistake as a 401.
+      const status = getStatus(err)
+      setError(status === 401 || status === 400 ? t('auth.invalidCredentials') : t('common.error'))
       setSubmitting(false)
     }
   }

@@ -1,3 +1,4 @@
+using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Domain.Entities;
 using SenicPosSaaS.Domain.Enums;
 
@@ -5,13 +6,22 @@ namespace SenicPosSaaS.Infrastructure.Data;
 
 public static class DbInitializer
 {
-    public static async Task SeedAsync(ApplicationDbContext context)
+    /// <summary>The demo tenant every seeded row belongs to. Use it as the tenant id when signing in.</summary>
+    public static readonly Guid DemoTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+    /// <summary>
+    /// Seeds demo data for local development. Demo users are only created when
+    /// <paramref name="demoPassword"/> is configured (Seed:DemoPassword).
+    /// </summary>
+    public static async Task SeedAsync(ApplicationDbContext context, IPasswordHasher passwordHasher, string? demoPassword)
     {
+        await SeedUsersAsync(context, passwordHasher, demoPassword);
+
         // Check if database already has data
         if (context.Subscriptions.Any())
             return;
 
-        var tenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var tenantId = DemoTenantId;
 
         // Seed Subscription
         var subscription = new Subscription
@@ -128,6 +138,30 @@ public static class DbInitializer
             }
         };
         context.InventoryItems.AddRange(inventoryItems);
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>One user per role: admin@, owner@, cashier@ and viewer@demo.test.</summary>
+    private static async Task SeedUsersAsync(ApplicationDbContext context, IPasswordHasher passwordHasher, string? demoPassword)
+    {
+        if (string.IsNullOrEmpty(demoPassword) || context.Users.Any())
+            return;
+
+        foreach (var role in Enum.GetValues<UserRole>())
+        {
+            context.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                TenantId = DemoTenantId,
+                Email = $"{role.ToString().ToLower()}@demo.test",
+                Name = $"Demo {role}",
+                PasswordHash = passwordHasher.Hash(demoPassword),
+                Role = role,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
 
         await context.SaveChangesAsync();
     }

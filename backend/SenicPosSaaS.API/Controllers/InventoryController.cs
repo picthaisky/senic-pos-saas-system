@@ -1,12 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SenicPosSaaS.API.Auth;
 using SenicPosSaaS.Application.DTOs.InventoryItem;
 using SenicPosSaaS.Application.Interfaces;
 
 namespace SenicPosSaaS.API.Controllers;
 
-[ApiController]
 [Route("api/[controller]")]
-public class InventoryController : ControllerBase
+public class InventoryController : TenantControllerBase
 {
     private readonly IInventoryItemService _inventoryService;
     private readonly ILogger<InventoryController> _logger;
@@ -18,22 +19,22 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new inventory item
+    /// Items of the signed-in user's tenant. Every filter is optional.
     /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<InventoryItemDto>> CreateItem([FromBody] CreateInventoryItemDto dto, CancellationToken cancellationToken)
+    [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<InventoryItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> GetItems(
+        [FromQuery] string? search,
+        [FromQuery] string? category,
+        [FromQuery] bool? isActive,
+        [FromQuery] bool lowStock = false,
+        CancellationToken cancellationToken = default)
     {
-        var item = await _inventoryService.CreateInventoryItemAsync(dto, cancellationToken);
-        _logger.LogInformation("Inventory item {ItemName} created successfully", item.Name);
-        return CreatedAtAction(nameof(GetItemById), new { id = item.Id }, item);
+        var items = await _inventoryService.SearchInventoryItemsAsync(TenantId, search, category, isActive, lowStock, cancellationToken);
+        return Ok(items);
     }
 
-    /// <summary>
-    /// Get inventory item by ID
-    /// </summary>
-    [HttpGet("{id}")]
+    [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<InventoryItemDto>> GetItemById(Guid id, CancellationToken cancellationToken)
@@ -45,21 +46,42 @@ public class InventoryController : ControllerBase
         return Ok(item);
     }
 
-    /// <summary>
-    /// Get all inventory items for a tenant
-    /// </summary>
-    [HttpGet("tenant/{tenantId}")]
-    [ProducesResponseType(typeof(IEnumerable<InventoryItemDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> GetItemsByTenantId(Guid tenantId, CancellationToken cancellationToken)
+    [HttpGet("barcode/{barcode}")]
+    [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<InventoryItemDto>> GetItemByBarcode(string barcode, CancellationToken cancellationToken)
     {
-        var items = await _inventoryService.GetInventoryItemsByTenantIdAsync(tenantId, cancellationToken);
+        var item = await _inventoryService.GetInventoryItemByBarcodeAsync(TenantId, barcode, cancellationToken);
+        if (item == null)
+            return NotFound();
+
+        return Ok(item);
+    }
+
+    [HttpGet("low-stock")]
+    [Authorize(Roles = Roles.Managers)]
+    [ProducesResponseType(typeof(IEnumerable<InventoryItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> GetLowStockItems(CancellationToken cancellationToken)
+    {
+        var items = await _inventoryService.GetLowStockItemsAsync(TenantId, cancellationToken);
         return Ok(items);
     }
 
-    /// <summary>
-    /// Update an inventory item
-    /// </summary>
-    [HttpPut("{id}")]
+    [HttpPost]
+    [Authorize(Roles = Roles.Managers)]
+    [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<InventoryItemDto>> CreateItem([FromBody] CreateInventoryItemDto dto, CancellationToken cancellationToken)
+    {
+        dto.TenantId = TenantId;
+        var item = await _inventoryService.CreateInventoryItemAsync(dto, cancellationToken);
+        _logger.LogInformation("Inventory item {ItemName} created successfully", item.Name);
+        return CreatedAtAction(nameof(GetItemById), new { id = item.Id }, item);
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = Roles.Managers)]
     [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<InventoryItemDto>> UpdateItem(Guid id, [FromBody] UpdateInventoryItemDto dto, CancellationToken cancellationToken)
@@ -72,10 +94,8 @@ public class InventoryController : ControllerBase
         return Ok(item);
     }
 
-    /// <summary>
-    /// Delete an inventory item
-    /// </summary>
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = Roles.Managers)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteItem(Guid id, CancellationToken cancellationToken)
@@ -86,16 +106,5 @@ public class InventoryController : ControllerBase
 
         _logger.LogInformation("Inventory item {ItemId} deleted successfully", id);
         return NoContent();
-    }
-
-    /// <summary>
-    /// Get low stock items for a tenant
-    /// </summary>
-    [HttpGet("tenant/{tenantId}/low-stock")]
-    [ProducesResponseType(typeof(IEnumerable<InventoryItemDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> GetLowStockItems(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var items = await _inventoryService.GetLowStockItemsAsync(tenantId, cancellationToken);
-        return Ok(items);
     }
 }
