@@ -1,17 +1,26 @@
-import { env } from '@/lib/env'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { createBrowserRouter, RouterProvider } from 'react-router'
+import { Toaster } from '@/components/ui'
+import { refreshSession } from '@/lib/api'
+import { queryClient } from '@/lib/query-client'
+import { routes } from './router'
 
-// Placeholder shell for Phase 1. Router, providers and the real layout arrive in Phase 2.
 export function App() {
+  const [router] = useState(() => createBrowserRouter(routes))
+
+  // Restore the session from the refresh cookie. Until this settles the auth status is
+  // 'loading' and RequireAuth shows a spinner instead of bouncing to the login page.
+  useEffect(() => {
+    refreshSession().catch(() => {
+      // Not signed in: refreshSession already marked the session anonymous.
+    })
+  }, [])
+
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <section className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-sm">
-        <img src="/logo.svg" alt="" className="size-12" />
-        <h1 className="mt-4 text-2xl font-semibold">Senic POS</h1>
-        <p className="mt-2 text-muted">React + TypeScript + Tailwind CSS + PWA</p>
-        <p className="mt-6 text-sm text-muted">
-          API: <code className="text-fg">{env.apiUrl}</code>
-        </p>
-      </section>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+      <Toaster />
+    </QueryClientProvider>
   )
 }

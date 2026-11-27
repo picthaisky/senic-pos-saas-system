@@ -28,17 +28,27 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 | `npm run lint`    | oxlint                                              |
 | `npm run format`  | Prettier                                            |
 
+## โหมดจำลอง (mock)
+
+Backend ยังไม่มีระบบ login ดังนั้น `.env.development` ตั้ง `VITE_USE_MOCKS=true` ไว้
+เพื่อให้ `src/mocks/mock-api.ts` ตอบ `/api/auth/*` แทน ส่วน request อื่นยังวิ่งไป backend จริงผ่าน proxy
+
+- ใช้รหัสร้าน อีเมล และรหัสผ่านใดก็ได้ (รหัสผ่านอย่างน้อย 6 ตัวอักษร)
+- ขึ้นต้นอีเมลด้วย `admin@`, `cashier@` หรือ `viewer@` เพื่อทดสอบแต่ละ role อีเมลอื่นได้ role Owner
+- เมื่อ backend มี `AuthController` แล้วให้ตั้งเป็น `false` โหมดนี้ไม่ถูกรวมใน production build
+
 ## โครงสร้าง
 
 ```
 src/
-├── app/                # App, router, providers
-├── features/<name>/    # pages/, components/, api.ts, types.ts ของแต่ละฟีเจอร์
-├── components/ui/      # Button, Input, Table, Modal ...
-├── components/layout/  # Sidebar, Topbar
-├── lib/                # env, axios client, offline db
-├── stores/             # Zustand stores (auth, cart, theme)
-├── i18n/locales/       # th.json, en.json
+├── app/                # App, router, navigation (เมนูและสิทธิ์ของแต่ละหน้า)
+├── features/<name>/    # pages/, components/, api.ts ของแต่ละฟีเจอร์
+├── components/ui/      # Button, Input, Select, Card, DataTable, Modal, Toaster, Spinner
+├── components/layout/  # AppLayout, Sidebar, Topbar
+├── lib/                # api (axios + auto-refresh), query-client, env, cn
+├── stores/             # Zustand stores: auth, theme, toast
+├── i18n/locales/       # th.json (ต้นแบบของ key), en.json
+├── mocks/              # mock API สำหรับ dev
 ├── styles/index.css    # Tailwind + design tokens
 └── test/setup.ts
 ```
@@ -51,4 +61,7 @@ src/
 - ห้ามใช้ `enum` (tsconfig เปิด `erasableSyntaxOnly`) ให้ใช้ union ของ string แทน
 - ใน test ใช้ global ของ Vitest (`expect`, `vi`, `describe`) ไม่ต้อง import จาก `'vitest'`
   เหตุผลอยู่ใน `src/test/setup.ts`
+- ข้อความบนหน้าจอทุกคำต้องผ่าน `t('...')` และเพิ่ม key ทั้งใน `th.json` และ `en.json`
+- เพิ่มหน้าใหม่ที่ `src/app/navigation.ts` ที่เดียว เมนูและการตรวจสิทธิ์ของ route จะตามมาเอง
+- เรียก API ผ่าน `api` จาก `@/lib/api` เท่านั้น เพื่อให้แนบ token และ refresh อัตโนมัติ
 - API contract อยู่ที่ `../docs/API_REFERENCE.md`
