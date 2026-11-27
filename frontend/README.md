@@ -64,6 +64,14 @@ Dev server ส่งต่อ `/api` และ `/hubs` ไปที่ backend �
 ทดสอบได้ในโหมด mock: เปิด DevTools → Network → Offline แล้วลองขายในหน้า POS
 ส่วน service worker (เปิดแอปได้โดยไม่มีเน็ต, ปุ่มติดตั้งแอป) ต้องทดสอบด้วย `npm run build && npm run preview`
 
+## การแจ้งเตือนแบบ real-time และการส่งออกข้อมูล
+
+- **Real-time**: เมื่อ login กับ backend จริง แอปจะต่อ SignalR ที่ `/hubs/notifications`
+  การขายใหม่ทำให้ตัวเลขในหน้า Dashboard และ Inventory อัปเดตเอง และมีข้อความแจ้งเมื่อสินค้าถึงจุดสั่งซื้อ
+  (เฉพาะ Admin และ Owner) โค้ดอยู่ที่ `src/app/realtime.ts` โหมด mock ไม่มี hub จึงไม่ทำงานในโหมดนั้น
+- **ส่งออก CSV**: ปุ่ม "ส่งออก CSV" ในหน้า Inventory (ทุกแถวที่ตรงกับตัวกรอง ไม่ใช่เฉพาะหน้าที่เห็น) และหน้า Customers
+  ไฟล์เปิดใน Excel ได้โดยตรงและอ่านภาษาไทยถูกต้อง โค้ดอยู่ที่ `src/lib/export-csv.ts`
+
 ## โครงสร้าง
 
 ```text

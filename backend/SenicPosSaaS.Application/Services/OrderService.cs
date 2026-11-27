@@ -14,15 +14,18 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly IInventoryItemRepository _inventoryRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly IRealtimeNotifier? _notifier;
 
     public OrderService(
         IOrderRepository orderRepository,
         IInventoryItemRepository inventoryRepository,
-        ICustomerRepository customerRepository)
+        ICustomerRepository customerRepository,
+        IRealtimeNotifier? notifier = null)
     {
         _orderRepository = orderRepository;
         _inventoryRepository = inventoryRepository;
         _customerRepository = customerRepository;
+        _notifier = notifier;
     }
 
     public async Task<OrderDto> CreateOrderAsync(CreateOrderDto dto, CancellationToken cancellationToken = default)
@@ -63,6 +66,7 @@ public class OrderService : IOrderService
 
         decimal totalAmount = 0;
         var orderItems = new List<OrderItem>();
+        var newlyLowStock = new Dictionary<Guid, InventoryItem>();
 
         // The same item may appear on several lines; stock is checked against the running total.
         foreach (var itemDto in dto.Items)
@@ -90,9 +94,15 @@ public class OrderService : IOrderService
                 CreatedAt = now
             });
 
+            var wasAboveReorderPoint = inventoryItem.Quantity > inventoryItem.MinimumStock;
             inventoryItem.Quantity -= itemDto.Quantity;
             inventoryItem.UpdatedAt = now;
             await _inventoryRepository.UpdateAsync(inventoryItem, cancellationToken);
+
+            // Alert once, at the moment the item crosses its reorder point, not on every later sale.
+            // (Keyed by item, so an item on several lines of one sale is still announced once.)
+            if (wasAboveReorderPoint && inventoryItem.Quantity <= inventoryItem.MinimumStock)
+                newlyLowStock[inventoryItem.Id] = inventoryItem;
         }
 
         order.TotalAmount = totalAmount;
@@ -103,6 +113,15 @@ public class OrderService : IOrderService
         // The order, its items and the stock changes are saved together in one transaction.
         await _orderRepository.AddAsync(order, cancellationToken);
         await _orderRepository.SaveChangesAsync(cancellationToken);
+
+        // Only after the sale is safely stored. The request's cancellation token is not passed
+        // on: the sale has happened, so the people watching should hear about it regardless.
+        if (_notifier != null)
+        {
+            await _notifier.OrderCreatedAsync(order.TenantId, new OrderCreatedEvent(order.Id, order.OrderNumber, order.NetAmount), CancellationToken.None);
+            foreach (var item in newlyLowStock.Values)
+                await _notifier.LowStockAsync(order.TenantId, new LowStockEvent(item.Id, item.Name, item.Quantity, item.MinimumStock), CancellationToken.None);
+        }
 
         return MapToOrderDto(order);
     }

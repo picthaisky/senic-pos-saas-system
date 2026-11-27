@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.API.Realtime;
 using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Application.Services;
 using SenicPosSaaS.Domain.Interfaces;
@@ -100,8 +101,26 @@ builder.Services
             NameClaimType = AppClaims.Name,
             RoleClaimType = AppClaims.Role
         };
+        // Browsers cannot set headers on WebSocket requests, so SignalR sends the access token
+        // in the query string. It is accepted there for the hub endpoints only.
+        bearer.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                    context.Token = token;
+                return Task.CompletedTask;
+            }
+        };
     });
 builder.Services.AddAuthorization();
+
+// Live notifications (new sales, low stock). Payload enums travel as names, like the REST API.
+builder.Services
+    .AddSignalR()
+    .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddSingleton<IRealtimeNotifier, SignalRNotifier>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
@@ -173,6 +192,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationsHub>("/hubs/notifications");
 
 app.Run();
 

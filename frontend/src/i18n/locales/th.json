@@ -15,7 +15,8 @@
     "actions": "จัดการ",
     "noData": "ไม่มีข้อมูล",
     "error": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
-    "loadFailed": "โหลดข้อมูลไม่สำเร็จ"
+    "loadFailed": "โหลดข้อมูลไม่สำเร็จ",
+    "exportCsv": "ส่งออก CSV"
   },
   "validation": {
     "required": "กรุณากรอกข้อมูล",
@@ -200,5 +201,8 @@
     "updateAvailable": "มีเวอร์ชันใหม่พร้อมใช้งาน",
     "reload": "อัปเดต",
     "install": "ติดตั้งแอป"
+  },
+  "realtime": {
+    "lowStock": "{{name}} ใกล้หมด เหลือ {{quantity}}"
   }
 }

@@ -192,14 +192,40 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 Frontend เดิมยังไม่มีหน้า Subscription จึงไม่อยู่ในขอบเขตการย้ายรอบแรก
 
-## 8. จองไว้สำหรับ Phase 6
+## 8. Real-time และ Push
 
-| Path                                                             | ใช้ทำอะไร                                |
-| ---------------------------------------------------------------- | --------------------------------------- |
-| `/hubs/notifications` (SignalR)                                  | แจ้งเตือน stock ต่ำ และยอดขายแบบ real-time |
-| `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions` | เก็บ Web Push subscription               |
+### SignalR hub ✅
 
-Vite dev server ตั้ง proxy ให้ `/api` และ `/hubs` ไว้แล้ว
+เชื่อมต่อที่ `/hubs/notifications` ต้องส่ง access token (SignalR client ส่งให้ผ่าน `accessTokenFactory`)
+Hub ส่งข้อมูลทางเดียว client ไม่ต้องเรียก method ใด ผู้ใช้ได้รับเฉพาะ event ของ tenant ตัวเอง
+
+| Event          | ส่งเมื่อ                                   | ผู้รับ                  |
+| -------------- | --------------------------------------- | -------------------- |
+| `OrderCreated` | บันทึกการขายสำเร็จ                         | Admin, Owner, Viewer |
+| `LowStock`     | การขายทำให้สินค้าลดลงถึงจุดสั่งซื้อ (แจ้งครั้งเดียว) | Admin, Owner         |
+
+```jsonc
+// OrderCreated
+{ "orderId": "guid", "orderNumber": "ORD-...", "netAmount": 256.8 }
+
+// LowStock
+{ "inventoryItemId": "guid", "name": "...", "quantity": 9, "minimumStock": 10 }
+```
+
+- `LowStock` ส่งเฉพาะตอนที่จำนวนข้ามจากมากกว่าจุดสั่งซื้อลงมาถึงหรือต่ำกว่า การขายครั้งถัดไปของสินค้าที่ต่ำอยู่แล้วไม่แจ้งซ้ำ
+- การแก้จำนวนผ่าน `PUT /api/inventory/{id}` และการยกเลิกบิลยังไม่ส่ง event
+- ถ้าส่ง event ไม่สำเร็จ การขายยังสำเร็จตามปกติ
+- เมื่อรัน API หลาย instance ต้องเพิ่ม backplane (เช่น Redis) ไม่เช่นนั้น event จะไปถึงเฉพาะผู้ใช้ที่ต่ออยู่กับ instance เดียวกัน
+
+Vite dev server และ nginx ของ frontend ตั้ง proxy ให้ `/hubs` ไว้แล้ว
+
+### Web Push ⏳
+
+| Path                                                             | ใช้ทำอะไร                  |
+| ---------------------------------------------------------------- | ------------------------- |
+| `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions` | เก็บ Web Push subscription |
+
+ยังไม่ได้ทำ ต้องมี VAPID key ของระบบ และทดสอบได้เฉพาะในเบราว์เซอร์จริงผ่าน HTTPS
 
 ## 9. รายละเอียดที่ควรรู้
 

@@ -15,7 +15,8 @@
     "actions": "Actions",
     "noData": "No data",
     "error": "Something went wrong. Please try again.",
-    "loadFailed": "Could not load the data"
+    "loadFailed": "Could not load the data",
+    "exportCsv": "Export CSV"
   },
   "validation": {
     "required": "This field is required",
@@ -203,5 +204,8 @@
     "updateAvailable": "A new version is ready",
     "reload": "Update",
     "install": "Install app"
+  },
+  "realtime": {
+    "lowStock": "{{name}} is running low: {{quantity}} left"
   }
 }
