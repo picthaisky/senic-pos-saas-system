@@ -58,6 +58,11 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
+      alias: {
+        'virtual:pwa-register/react': fileURLToPath(
+          new URL('./src/test/pwa-register-stub.ts', import.meta.url),
+        ),
+      },
     },
   }
 })

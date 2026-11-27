@@ -23,19 +23,38 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+/**
+ * True when the request never got an answer from the API: no connection, a timeout, or a
+ * gateway in front of it (the dev proxy, a load balancer) reporting that the API is down.
+ * These are the failures worth retrying later; an answer such as 400 or 409 is not.
+ */
+export function isNetworkError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false
+  if (!error.response) return true
+  return [502, 503, 504].includes(error.response.status)
+}
+
 let refreshInFlight: Promise<void> | null = null
 
 /**
  * Exchanges the refresh cookie for a new access token. Concurrent callers share one request,
  * so a burst of 401s (or the startup check under StrictMode) refreshes only once.
- * On failure the session is cleared, which sends the user to the login page.
+ *
+ * If the server rejects the cookie, the session is cleared, which sends the user to the login
+ * page. If the server cannot be reached, a signed-in user stays signed in (the outage is not
+ * their fault), and at startup the last user is restored as an offline session.
  */
 export function refreshSession(): Promise<void> {
   refreshInFlight ??= api
     .post<AuthSession>('/auth/refresh', null, { skipAuthRefresh: true })
     .then(({ data }) => useAuthStore.getState().setSession(data))
     .catch((error: unknown) => {
-      useAuthStore.getState().clearSession()
+      const auth = useAuthStore.getState()
+      if (!isNetworkError(error)) {
+        auth.clearSession()
+      } else if (auth.status === 'loading' && !auth.resumeOffline()) {
+        auth.clearSession()
+      }
       throw error
     })
     .finally(() => {
@@ -53,7 +72,9 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
   config._retried = true
   try {
     await refreshSession()
-  } catch {
+  } catch (refreshError) {
+    // Could not reach the server to refresh: report that, so callers treat it as an outage.
+    if (isNetworkError(refreshError)) throw refreshError
     // The caller asked about its own request, so report that 401 rather than the refresh failure.
     throw error
   }

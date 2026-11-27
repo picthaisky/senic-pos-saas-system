@@ -1,9 +1,12 @@
-import { Languages, LogOut, Menu, Moon, Sun } from 'lucide-react'
+import { Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { InstallAppButton } from '@/components/PwaPrompt'
 import { Button } from '@/components/ui'
 import { authApi } from '@/features/auth/api'
+import { OfflineQueueButton } from '@/features/pos/components/OfflineQueue'
 import { useAuthStore } from '@/stores/auth'
+import { useNetworkStore } from '@/stores/network'
 import { useThemeStore } from '@/stores/theme'
 
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
@@ -11,6 +14,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const theme = useThemeStore((state) => state.theme)
   const toggleTheme = useThemeStore((state) => state.toggleTheme)
   const clearSession = useAuthStore((state) => state.clearSession)
+  const online = useNetworkStore((state) => state.online)
   const [loggingOut, setLoggingOut] = useState(false)
 
   async function handleLogout() {
@@ -38,6 +42,18 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
       </Button>
 
       <div className="flex-1" />
+
+      {!online && (
+        <span
+          role="status"
+          className="mr-1 inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-3 py-1 text-sm font-medium"
+        >
+          <WifiOff className="size-4 text-warning" aria-hidden="true" />
+          {t('offline.badge')}
+        </span>
+      )}
+      <OfflineQueueButton />
+      <InstallAppButton />
 
       <Button
         variant="ghost"

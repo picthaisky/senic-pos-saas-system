@@ -1,6 +1,7 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 import * as matchers from '@testing-library/jest-dom/matchers'
 import { cleanup } from '@testing-library/react'
+import 'fake-indexeddb/auto' // jsdom has no IndexedDB; the offline catalog and order queue use it
 import '@/i18n'
 
 // Use the vitest globals (expect, afterEach, vi, ...) instead of importing from 'vitest'.

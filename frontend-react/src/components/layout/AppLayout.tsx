@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router'
+import { useOfflineSync } from '@/features/pos/offline/useOfflineSync'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
 
 export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Sends sales that were queued while offline, for as long as someone is signed in.
+  useOfflineSync()
 
   return (
     <div className="flex h-screen overflow-hidden">

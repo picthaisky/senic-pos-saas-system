@@ -1,50 +1,63 @@
-import { CreditCard, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { CloudOff, CreditCard, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, ConfirmDialog, Modal, Select } from '@/components/ui'
 import { useCustomers } from '@/features/customers/api'
+import { DASHBOARD_KEY } from '@/features/dashboard/api'
+import { INVENTORY_KEY } from '@/features/inventory/api'
 import { errorMessage } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { toast } from '@/stores/toast'
-import { useCreateOrder } from '../api'
 import { cartTotals, TAX_RATE, useCartStore } from '../cart-store'
-import { type Order, PAYMENT_METHODS, type PaymentMethod } from '../types'
+import { type SaleResult, submitSale } from '../offline/queue'
+import { PAYMENT_METHODS, type PaymentMethod } from '../types'
 
 export function CartPanel() {
   const { t } = useTranslation()
   const cart = useCartStore()
   const customers = useCustomers()
-  const createOrder = useCreateOrder()
+  const queryClient = useQueryClient()
   const [confirmingClear, setConfirmingClear] = useState(false)
-  const [receipt, setReceipt] = useState<Order | null>(null)
+  const [receipt, setReceipt] = useState<SaleResult | null>(null)
 
   const totals = cartTotals(cart.lines)
   const isEmpty = cart.lines.length === 0
 
-  function checkout() {
-    createOrder.mutate(
-      {
-        customerId: cart.customerId,
-        paymentMethod: cart.paymentMethod,
-        discountAmount: 0,
-        notes: null,
-        clientOrderId: cart.clientOrderId,
-        items: cart.lines.map((line) => ({
-          inventoryItemId: line.inventoryItemId,
-          quantity: line.quantity,
-          discount: 0,
-        })),
-      },
-      {
-        onSuccess: (order) => {
-          cart.clear()
-          setReceipt(order)
+  const sale = useMutation({
+    // Must run while the browser is offline too: that is when the sale gets queued.
+    networkMode: 'always',
+    mutationFn: () =>
+      submitSale(
+        {
+          customerId: cart.customerId,
+          paymentMethod: cart.paymentMethod,
+          discountAmount: 0,
+          notes: null,
+          clientOrderId: cart.clientOrderId,
+          items: cart.lines.map((line) => ({
+            inventoryItemId: line.inventoryItemId,
+            quantity: line.quantity,
+            discount: 0,
+          })),
         },
-        // The cart (and its clientOrderId) is kept, so trying again cannot create a duplicate.
-        onError: (error) => toast.error(errorMessage(error, t('pos.checkoutFailed'))),
-      },
-    )
-  }
+        {
+          lines: cart.lines.map(({ name, quantity, unitPrice }) => ({ name, quantity, unitPrice })),
+          total: totals.total,
+        },
+      ),
+    onSuccess: (result) => {
+      cart.clear()
+      setReceipt(result)
+      if (result.kind === 'sent') {
+        // A sale changes stock levels and the dashboard figures.
+        void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
+        void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY })
+      }
+    },
+    // The cart (and its clientOrderId) is kept, so trying again cannot create a duplicate.
+    onError: (error) => toast.error(errorMessage(error, t('pos.checkoutFailed'))),
+  })
 
   return (
     <section
@@ -167,10 +180,10 @@ export function CartPanel() {
         <Button
           className="h-12 text-lg"
           disabled={isEmpty}
-          loading={createOrder.isPending}
-          onClick={checkout}
+          loading={sale.isPending}
+          onClick={() => sale.mutate()}
         >
-          {!createOrder.isPending && <CreditCard className="size-5" />}
+          {!sale.isPending && <CreditCard className="size-5" />}
           {t('pos.checkout')}
         </Button>
         <Button variant="secondary" disabled={isEmpty} onClick={() => setConfirmingClear(true)}>
@@ -195,22 +208,38 @@ export function CartPanel() {
       <Modal
         open={!!receipt}
         onClose={() => setReceipt(null)}
-        title={t('pos.orderCreated')}
+        title={receipt?.kind === 'queued' ? t('offline.savedTitle') : t('pos.orderCreated')}
         footer={<Button onClick={() => setReceipt(null)}>{t('pos.newSale')}</Button>}
       >
-        {receipt && (
+        {receipt?.kind === 'sent' && (
           <dl className="grid grid-cols-2 gap-y-2 tabular-nums">
             <dt className="text-muted">{t('pos.orderNumber')}</dt>
-            <dd className="text-right font-medium">{receipt.orderNumber}</dd>
+            <dd className="text-right font-medium">{receipt.order.orderNumber}</dd>
             <dt className="text-muted">{t('pos.paymentMethod')}</dt>
-            <dd className="text-right">{t(`payment.${receipt.paymentMethod}`)}</dd>
+            <dd className="text-right">{t(`payment.${receipt.order.paymentMethod}`)}</dd>
             <dt className="text-muted">{t('pos.tax', { rate: TAX_RATE * 100 })}</dt>
-            <dd className="text-right">{formatCurrency(receipt.taxAmount)}</dd>
+            <dd className="text-right">{formatCurrency(receipt.order.taxAmount)}</dd>
             <dt className="text-lg font-semibold">{t('pos.total')}</dt>
             <dd className="text-right text-lg font-semibold">
-              {formatCurrency(receipt.netAmount)}
+              {formatCurrency(receipt.order.netAmount)}
             </dd>
           </dl>
+        )}
+        {receipt?.kind === 'queued' && (
+          <div className="flex flex-col gap-3">
+            <p className="flex items-start gap-2 rounded-lg bg-warning/15 px-3 py-2 text-sm">
+              <CloudOff className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+              {t('offline.savedMessage')}
+            </p>
+            <dl className="grid grid-cols-2 gap-y-2 tabular-nums">
+              <dt className="text-muted">{t('pos.paymentMethod')}</dt>
+              <dd className="text-right">{t(`payment.${receipt.queued.request.paymentMethod}`)}</dd>
+              <dt className="text-lg font-semibold">{t('offline.estimatedTotal')}</dt>
+              <dd className="text-right text-lg font-semibold">
+                {formatCurrency(receipt.queued.summary.total)}
+              </dd>
+            </dl>
+          </div>
         )}
       </Modal>
     </section>

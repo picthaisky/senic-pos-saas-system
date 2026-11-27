@@ -177,5 +177,31 @@
     "DebitCard": "Debit card",
     "QRCode": "QR code",
     "BankTransfer": "Bank transfer"
+  },
+  "offline": {
+    "badge": "Offline",
+    "localResults": "Results from this device. Stock levels may be out of date.",
+    "savedTitle": "Sale saved on this device",
+    "savedMessage": "The server cannot be reached right now. This sale will be sent automatically when the connection returns.",
+    "estimatedTotal": "Total (estimate)",
+    "queueButton": "{{count}} sales waiting to be sent",
+    "queueTitle": "Sales waiting to be sent",
+    "queueEmpty": "Nothing is waiting to be sent",
+    "willSyncLater": "Sales are sent automatically when the connection returns",
+    "pending": "Waiting",
+    "refused": "Not accepted",
+    "syncNow": "Send now",
+    "synced_one": "{{count}} queued sale sent",
+    "synced_other": "{{count}} queued sales sent",
+    "syncRefused_one": "The server did not accept {{count}} sale. Please review it.",
+    "syncRefused_other": "The server did not accept {{count}} sales. Please review them.",
+    "discard": "Discard",
+    "discardTitle": "Discard sale",
+    "discardConfirm": "This sale will not be recorded anywhere and cannot be recovered. Discard it?"
+  },
+  "pwa": {
+    "updateAvailable": "A new version is ready",
+    "reload": "Update",
+    "install": "Install app"
   }
 }

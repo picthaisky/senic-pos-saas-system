@@ -1,18 +1,20 @@
-import { Package, ScanBarcode, Search } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { CloudOff, Package, ScanBarcode, Search } from 'lucide-react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, Card, ErrorState, Input, PageSpinner } from '@/components/ui'
-import { inventoryApi, useInventory } from '@/features/inventory/api'
 import type { InventoryItem } from '@/features/inventory/types'
-import { getStatus } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { useNetworkStore } from '@/stores/network'
 import { toast } from '@/stores/toast'
 import { useCartStore } from '../cart-store'
 import { CartPanel } from '../components/CartPanel'
+import { findByBarcode, searchProducts, syncCatalog } from '../offline/catalog'
 
 export function PosPage() {
   const { t } = useTranslation()
   const addItem = useCartStore((state) => state.addItem)
+  const online = useNetworkStore((state) => state.online)
 
   const [barcode, setBarcode] = useState('')
   const [scanning, setScanning] = useState(false)
@@ -20,7 +22,20 @@ export function PosPage() {
   /** The submitted search; results are only fetched once the cashier presses Enter or Search. */
   const [query, setQuery] = useState('')
 
-  const results = useInventory({ search: query, isActive: true }, { enabled: query !== '' })
+  // Keep the offline copy of the catalog fresh: when the POS opens and when the network returns.
+  useEffect(() => {
+    if (online) void syncCatalog()
+  }, [online])
+
+  const results = useQuery({
+    // `online` is part of the key so results are looked up again when the connection changes.
+    queryKey: ['pos', 'search', query, online],
+    queryFn: () => searchProducts(query),
+    enabled: query !== '',
+    // Run even when the browser is offline: the lookup falls back to the local catalog.
+    networkMode: 'always',
+    staleTime: 0,
+  })
 
   function addToCart(item: InventoryItem) {
     if (!addItem(item)) toast.error(t('pos.outOfStockNamed', { name: item.name }))
@@ -32,12 +47,15 @@ export function PosPage() {
     if (!code) return
     setScanning(true)
     try {
-      addToCart(await inventoryApi.getByBarcode(code))
-      setBarcode('')
-    } catch (error) {
-      toast.error(
-        getStatus(error) === 404 ? t('pos.barcodeNotFound', { barcode: code }) : t('common.error'),
-      )
+      const { result: item } = await findByBarcode(code)
+      if (item) {
+        addToCart(item)
+        setBarcode('')
+      } else {
+        toast.error(t('pos.barcodeNotFound', { barcode: code }))
+      }
+    } catch {
+      toast.error(t('common.error'))
     } finally {
       setScanning(false)
     }
@@ -98,16 +116,26 @@ export function PosPage() {
               <PageSpinner />
             ) : results.isError ? (
               <ErrorState message={t('common.loadFailed')} />
-            ) : results.data.length === 0 ? (
-              <p className="py-8 text-center text-muted">{t('pos.noResults', { query })}</p>
             ) : (
-              <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-                {results.data.map((item) => (
-                  <li key={item.id}>
-                    <ProductCard item={item} onAdd={() => addToCart(item)} />
-                  </li>
-                ))}
-              </ul>
+              <>
+                {results.data.source === 'local' && (
+                  <p className="mb-3 flex items-center gap-2 rounded-lg bg-warning/15 px-3 py-2 text-sm">
+                    <CloudOff className="size-4 shrink-0 text-warning" aria-hidden="true" />
+                    {t('offline.localResults')}
+                  </p>
+                )}
+                {results.data.result.length === 0 ? (
+                  <p className="py-8 text-center text-muted">{t('pos.noResults', { query })}</p>
+                ) : (
+                  <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                    {results.data.result.map((item) => (
+                      <li key={item.id}>
+                        <ProductCard item={item} onAdd={() => addToCart(item)} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </Card>
         )}

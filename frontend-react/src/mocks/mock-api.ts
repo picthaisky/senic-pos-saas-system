@@ -119,6 +119,11 @@ export function installMockApi(api: AxiosInstance, options: { delayMs?: number }
     )
     if (!route || !params) return network(config)
 
+    // A real server is unreachable while the browser is offline; so is the mock.
+    if (!navigator.onLine) {
+      throw new AxiosError('Network Error', AxiosError.ERR_NETWORK, config)
+    }
+
     await new Promise((resolve) => setTimeout(resolve, delayMs))
     const { status, data } = route[2]({
       params,
