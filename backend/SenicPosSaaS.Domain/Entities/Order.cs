@@ -28,6 +28,10 @@ public class Order : TenantEntity
     public int PointsRedeemed { get; set; }
     /// <summary>What those points took off the bill, in baht. Not part of <see cref="DiscountAmount"/>.</summary>
     public decimal PointsDiscount { get; set; }
+    /// <summary>The user who recorded the sale. Null on bills made before this was kept.</summary>
+    public Guid? SoldByUserId { get; set; }
+    /// <summary>That user's name at the time, as printed on the receipt.</summary>
+    public string? SoldByName { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public DateTime? CompletedAt { get; set; }

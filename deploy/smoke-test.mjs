@@ -119,6 +119,12 @@ if (!credentials) {
     dashboard.status === 200 && dashboard.json?.salesByDay?.length === 7,
     `status ${dashboard.status}`,
   )
+  const report = await call('GET', '/api/reports/sales')
+  check('sales report', report.status === 200 && report.json?.byDay?.length === 30, `status ${report.status}`)
+  // The spreadsheet is built on the server: an .xlsx file is a zip, which starts with "PK".
+  const workbook = await fetch(base + '/api/reports/sales.xlsx', { headers: { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) } })
+  const workbookStart = new Uint8Array(await workbook.arrayBuffer()).slice(0, 2)
+  check('sales report as a spreadsheet', workbook.status === 200 && workbookStart[0] === 0x50 && workbookStart[1] === 0x4b, `status ${workbook.status}`)
   const users = await call('GET', '/api/users')
   check(
     'user list includes the signed-in account',
@@ -189,7 +195,7 @@ if (!credentials) {
     check('walk-in sale', walkIn.status === 201, `status ${walkIn.status}`)
 
     const tooMany = await call('POST', '/api/orders', { paymentMethod: 'Cash', items: [{ inventoryItemId: item.json?.id, quantity: 99 }] })
-    check('insufficient stock is a 409', tooMany.status === 409, `status ${tooMany.status}`)
+    check('insufficient stock is a 409 that names the error for the app to translate', tooMany.status === 409 && tooMany.json?.code === 'insufficient_stock' && tooMany.json?.params?.available === 2, `status ${tooMany.status}, code ${tooMany.json?.code}`)
 
     const afterSales = await call('GET', `/api/inventory/${item.json?.id}`)
     check('stock deducted once per sale (6 - 3 - 1)', afterSales.json?.quantity === 2, `quantity ${afterSales.json?.quantity}`)
@@ -222,6 +228,16 @@ if (!credentials) {
       `status ${orders.status}`,
     )
 
+    const sold = await call('GET', '/api/reports/sales')
+    check(
+      'the sales report adds up the bills, names who sold them and works out the profit',
+      sold.status === 200 && sold.json?.totals?.orderCount >= 2 && sold.json.byItem?.length > 0 && sold.json.byCashier?.some((c) => c.name && c.orderCount >= 2) && sold.json.totals.cost > 0 && sold.json.totals.salesWithoutCost === 0 && sold.json.byItem.every((i) => i.profit !== null),
+      `status ${sold.status}, bills ${sold.json?.totals?.orderCount}`,
+    )
+
+    const deleteSold = await call('DELETE', `/api/inventory/${item.json?.id}`)
+    check('an item that was sold cannot be deleted, and the answer says why', deleteSold.status === 409 && deleteSold.json?.code === 'item_has_sales', `status ${deleteSold.status}`)
+
     const cancel = await call('POST', `/api/orders/${walkIn.json?.id}/cancel`)
     const afterCancel = await call('GET', `/api/inventory/${item.json?.id}`)
     check('cancelling returns the stock', cancel.status === 200 && afterCancel.json?.quantity === 3, `quantity ${afterCancel.json?.quantity}`)
@@ -242,6 +258,62 @@ if (!credentials) {
 
     const remove = await call('DELETE', `/api/customers/${second.json?.id}`)
     check('delete customer', remove.status === 204, `status ${remove.status}`)
+
+    // Items from a file: checked first, saved on the second call; a wrong row saves nothing.
+    const stamp = Date.now()
+    const upload = async (csv, query = '') => {
+      const form = new FormData()
+      form.append('file', new Blob([csv], { type: 'text/csv' }), 'items.csv')
+      const res = await fetch(base + '/api/inventory/import' + query, { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) } })
+      return { status: res.status, json: await res.json().catch(() => undefined) }
+    }
+    const file = `SKU,ชื่อสินค้า,ราคาขาย,คงเหลือ\nSMOKE-${stamp}-1,"สินค้านำเข้า, หนึ่ง",12.50,4\nSMOKE-${stamp}-2,สินค้านำเข้าสอง,8,0\n`
+    const checked = await upload(file, '?dryRun=true')
+    const imported = await upload(file)
+    const found = await call('GET', `/api/inventory?search=SMOKE-${stamp}&page=1`)
+    check(
+      'items are imported from a file, after a check that saves nothing',
+      checked.status === 200 && checked.json?.applied === false && checked.json?.toCreate === 2 && imported.json?.applied === true && found.json?.total === 2 && found.json.items.some((i) => i.name === 'สินค้านำเข้า, หนึ่ง' && i.price === 12.5 && i.quantity === 4),
+      `check ${checked.status}, import ${imported.status}, found ${found.json?.total}`,
+    )
+    const wrong = await upload(`sku,name,price\nSMOKE-${stamp}-3,ดี,1\nSMOKE-${stamp}-4,,abc\n`)
+    const afterWrong = await call('GET', `/api/inventory?search=SMOKE-${stamp}&page=1`)
+    check(
+      'a file with a wrong row saves nothing and names the row',
+      wrong.status === 200 && wrong.json?.applied === false && wrong.json?.errorCount === 2 && wrong.json.errors.every((e) => e.row === 3) && afterWrong.json?.total === 2,
+      `status ${wrong.status}, errors ${wrong.json?.errorCount}`,
+    )
+    // About 2 MB: more than nginx lets through unless it is told to (its own limit is 1 MB).
+    const long = 'x'.repeat(190)
+    let big = 'sku,name,description,price\n'
+    for (let n = 0; n < 4500; n++) big += `BIG-${stamp}-${n},${long} ${n},${long},1\n`
+    const bigCheck = await upload(big, '?dryRun=true')
+    check('a file of items larger than 1 MB gets through the web server', bigCheck.status === 200 && bigCheck.json?.totalRows === 4500 && bigCheck.json?.errorCount === 0, `status ${bigCheck.status}, ${Math.round(big.length / 1024)} KB`)
+
+    // A picture for an item: set by a manager, then readable by anyone who has its address.
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0))
+    const pictureForm = new FormData()
+    pictureForm.append('file', new Blob([png], { type: 'image/png' }), 'picture.png')
+    const authorized = { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) }
+    const pictured = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'POST', body: pictureForm, headers: authorized })
+    const picturedItem = await pictured.json().catch(() => undefined)
+    const shown = picturedItem?.imageUrl ? await fetch(base + picturedItem.imageUrl) : undefined
+    const shownBytes = shown ? new Uint8Array(await shown.arrayBuffer()) : new Uint8Array()
+    check(
+      'an item gets a picture, served without signing in',
+      pictured.status === 200 && /^\/api\/images\/[0-9a-f-]+\/[0-9a-f]{32}\.png$/.test(picturedItem?.imageUrl ?? '') && shown?.status === 200 && shown.headers.get('content-type') === 'image/png' && shownBytes.length === png.length,
+      `upload ${pictured.status}, read ${shown?.status}`,
+    )
+    const notPicture = new FormData()
+    notPicture.append('file', new Blob(['<script>alert(1)</script>'], { type: 'image/png' }), 'picture.png')
+    const refusedPicture = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'POST', body: notPicture, headers: authorized })
+    const unpictured = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'DELETE', headers: authorized })
+    const gone = picturedItem?.imageUrl ? await fetch(base + picturedItem.imageUrl) : undefined
+    check(
+      'a file that is not a picture is refused, and a removed picture is gone',
+      refusedPicture.status === 400 && unpictured.status === 200 && gone?.status === 404,
+      `refused ${refusedPicture.status}, removed ${unpictured.status}, read ${gone?.status}`,
+    )
 
     // A throw-away member of staff: added, signs in, is deactivated, can no longer sign in.
     const staff = {

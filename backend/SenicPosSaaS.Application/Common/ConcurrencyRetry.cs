@@ -17,8 +17,9 @@ public static class ConcurrencyRetry
 
     /// <param name="attempt">The whole operation, starting with its reads. Must be safe to repeat.</param>
     /// <param name="discardChanges">Clears what the failed attempt read and changed.</param>
+    /// <param name="busyCode">One of <see cref="ErrorCodes"/>, for that same case.</param>
     /// <param name="busyMessage">Shown (as a 409) in the unlikely case every attempt collided.</param>
-    public static async Task<T> RunAsync<T>(Func<Task<T>> attempt, Action discardChanges, string busyMessage)
+    public static async Task<T> RunAsync<T>(Func<Task<T>> attempt, Action discardChanges, string busyCode, string busyMessage)
     {
         for (var number = 1; ; number++)
         {
@@ -30,7 +31,7 @@ public static class ConcurrencyRetry
             {
                 discardChanges();
                 if (number >= MaxAttempts)
-                    throw new ConflictException(busyMessage);
+                    throw new ConflictException(busyCode, busyMessage);
 
                 // A short random pause so colliding requests do not all retry at the same instant.
                 await Task.Delay(Random.Shared.Next(5, 15 * number));

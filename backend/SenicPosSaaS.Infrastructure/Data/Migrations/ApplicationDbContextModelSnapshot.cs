@@ -325,6 +325,13 @@ namespace SenicPosSaaS.Infrastructure.Data.Migrations
                     b.Property<int>("PointsRedeemed")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SoldByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("SoldByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -395,6 +402,10 @@ namespace SenicPosSaaS.Infrastructure.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("UnitCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 

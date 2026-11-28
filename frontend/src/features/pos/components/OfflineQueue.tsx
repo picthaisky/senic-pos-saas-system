@@ -6,6 +6,7 @@ import { formatCurrency, formatDateTime } from '@/lib/format'
 import { useNetworkStore } from '@/stores/network'
 import { toast } from '@/stores/toast'
 import type { QueuedOrder } from '../offline/db'
+import { refusalOf } from '../offline/db'
 import { exportQueue, isStale, STALE_AFTER_HOURS } from '../offline/export'
 import {
   discardOrder,
@@ -119,7 +120,9 @@ export function OfflineQueueButton() {
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <Badge tone="danger">{t('offline.refused')}</Badge>
-                        {order.error && <span className="text-sm text-danger">{order.error}</span>}
+                        {refusalOf(order) && (
+                          <span className="text-sm text-danger">{refusalOf(order)}</span>
+                        )}
                       </div>
                       <div className="flex gap-1">
                         <Button

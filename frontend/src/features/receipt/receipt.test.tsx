@@ -35,6 +35,7 @@ const order: Order = {
   pointsEarned: 13,
   pointsRedeemed: 0,
   pointsDiscount: 0,
+  soldByName: 'สมหญิง รักงาน',
   status: 'Completed',
   paymentMethod: 'Cash',
   createdAt: '2026-11-28T03:15:00Z',

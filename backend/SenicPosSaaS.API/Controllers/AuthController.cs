@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.DTOs.Auth;
 using SenicPosSaaS.Application.Interfaces;
 
@@ -44,7 +45,7 @@ public class AuthController : ControllerBase
         if (_loginAttempts.IsLocked(request.TenantId, request.Email, out var retryAfter))
         {
             Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString("0");
-            return Problem(statusCode: StatusCodes.Status429TooManyRequests, title: "Too Many Requests", detail: "Too many failed sign-in attempts. Try again later.");
+            return this.CodedProblem(StatusCodes.Status429TooManyRequests, ErrorCodes.TooManySignInAttempts, "Too many failed sign-in attempts. Try again later.");
         }
 
         var result = await _authService.LoginAsync(request, cancellationToken);
@@ -52,7 +53,7 @@ public class AuthController : ControllerBase
         {
             _loginAttempts.RecordFailure(request.TenantId, request.Email);
             _logger.LogWarning("Failed login for tenant {TenantId}", request.TenantId);
-            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Unauthorized", detail: "Incorrect tenant, email or password.");
+            return this.CodedProblem(StatusCodes.Status401Unauthorized, ErrorCodes.SignInFailed, "Incorrect tenant, email or password.");
         }
 
         _loginAttempts.RecordSuccess(request.TenantId, request.Email);

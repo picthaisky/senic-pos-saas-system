@@ -2,8 +2,14 @@ import type { Customer, LoyaltyTransaction } from '@/features/customers/types'
 import type { AuditEntry } from '@/features/audit/api'
 import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types'
 import type { DashboardSummary } from '@/features/dashboard/api'
-import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
+import type {
+  CreateInventoryItem,
+  InventoryItem,
+  ItemImportResult,
+} from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
+import type { SalesReport } from '@/features/reports/api'
+import { useAuthStore } from '@/stores/auth'
 import { DEFAULT_SHOP_SETTINGS, type ShopSettings } from '@/features/shop/api'
 import { billTotals, lineSubtotal, pointsDiscountOf, pointsFor } from '@/features/shop/pricing'
 import type { Subscription } from '@/features/subscription/api'
@@ -219,6 +225,7 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
     pointsEarned: customer ? pointsFor(totals.total, shop.bahtPerPoint) : 0,
     pointsRedeemed,
     pointsDiscount: totals.pointsDiscount,
+    soldByName: useAuthStore.getState().user?.name ?? 'Somchai',
     status: 'Completed',
     paymentMethod: request.paymentMethod,
     createdAt: createdAt.toISOString(),
@@ -273,7 +280,9 @@ function changePoints(
   const customer = customers.find((candidate) => candidate.id === customerId)
   if (!customer) return notFound
   if (type === 'Redeemed' && body.points > customer.loyaltyPoints) {
-    return { status: 409, data: { title: 'Conflict', status: 409, detail: 'Not enough points' } }
+    return problem(409, 'not_enough_points', 'Not enough points', {
+      balance: customer.loyaltyPoints,
+    })
   }
   customer.loyaltyPoints += type === 'Earned' ? body.points : -body.points
   loyalty.push({
@@ -286,6 +295,126 @@ function changePoints(
     createdAt: new Date().toISOString(),
   })
   return { status: 200, data: { ...customer } }
+}
+
+/** Like the API's sales report: completed bills of the days from..to, added up every way. */
+function salesReport(from: string, to: string): SalesReport {
+  const byDay = new Map<string, { orderCount: number; netSales: number }>()
+  for (let day = new Date(`${from}T00:00:00`); localDate(day) <= to;) {
+    byDay.set(localDate(day), { orderCount: 0, netSales: 0 })
+    day.setDate(day.getDate() + 1)
+  }
+  const byItem = new Map<string, SalesReport['byItem'][number]>()
+  const byCashier = new Map<string, SalesReport['byCashier'][number]>()
+  const byPayment = new Map<string, SalesReport['byPaymentMethod'][number]>()
+  const totals = { orderCount: 0, netSales: 0, taxAmount: 0, discounts: 0, cancelledCount: 0 }
+  // The mock keeps no cost on a bill: it uses what the item costs now.
+  const revenue = new Map<string, number>()
+
+  for (const order of orders) {
+    const day = byDay.get(localDate(new Date(order.createdAt)))
+    if (!day) continue
+    if (order.status === 'Cancelled') totals.cancelledCount++
+    if (order.status !== 'Completed') continue
+
+    day.orderCount++
+    day.netSales = round2(day.netSales + order.netAmount)
+    totals.orderCount++
+    totals.netSales = round2(totals.netSales + order.netAmount)
+    totals.taxAmount = round2(totals.taxAmount + order.taxAmount)
+    totals.discounts = round2(
+      totals.discounts +
+        order.discountAmount +
+        order.pointsDiscount +
+        order.items.reduce((sum, line) => sum + line.discount, 0),
+    )
+
+    const cashier = byCashier.get(order.soldByName ?? '') ?? {
+      userId: order.soldByName,
+      name: order.soldByName,
+      orderCount: 0,
+      netSales: 0,
+    }
+    cashier.orderCount++
+    cashier.netSales = round2(cashier.netSales + order.netAmount)
+    byCashier.set(order.soldByName ?? '', cashier)
+
+    const payment = byPayment.get(order.paymentMethod) ?? {
+      paymentMethod: order.paymentMethod,
+      orderCount: 0,
+      netSales: 0,
+    }
+    payment.orderCount++
+    payment.netSales = round2(payment.netSales + order.netAmount)
+    byPayment.set(order.paymentMethod, payment)
+
+    for (const line of order.items) {
+      const entry = byItem.get(line.inventoryItemId) ?? {
+        inventoryItemId: line.inventoryItemId,
+        name: line.itemName,
+        category: items.find((item) => item.id === line.inventoryItemId)?.category ?? null,
+        quantity: 0,
+        amount: 0,
+        cost: 0,
+        profit: 0,
+      }
+      entry.quantity += line.quantity
+      entry.amount = round2(entry.amount + line.subtotal)
+      const unitCost = items.find((item) => item.id === line.inventoryItemId)?.cost ?? 0
+      entry.cost = round2((entry.cost ?? 0) + unitCost * line.quantity)
+      // The line's share of what the bill earned without VAT, after every discount.
+      const share = order.totalAmount
+        ? (line.subtotal * (order.netAmount - order.taxAmount)) / order.totalAmount
+        : 0
+      revenue.set(line.inventoryItemId, (revenue.get(line.inventoryItemId) ?? 0) + share)
+      byItem.set(line.inventoryItemId, entry)
+    }
+  }
+
+  let cost = 0
+  let costedRevenue = 0
+  for (const item of byItem.values()) {
+    const earned = revenue.get(item.inventoryItemId) ?? 0
+    item.profit = round2(earned - (item.cost ?? 0))
+    cost += item.cost ?? 0
+    costedRevenue += earned
+  }
+
+  const byCategory = new Map<string, SalesReport['byCategory'][number]>()
+  for (const item of byItem.values()) {
+    const entry = byCategory.get(item.category ?? '') ?? {
+      category: item.category,
+      quantity: 0,
+      amount: 0,
+      cost: 0,
+      profit: 0,
+    }
+    entry.quantity += item.quantity
+    entry.amount = round2(entry.amount + item.amount)
+    entry.cost = round2((entry.cost ?? 0) + (item.cost ?? 0))
+    entry.profit = round2((entry.profit ?? 0) + (item.profit ?? 0))
+    byCategory.set(item.category ?? '', entry)
+  }
+
+  return {
+    from,
+    to,
+    totals: {
+      ...totals,
+      averageOrderValue: totals.orderCount ? round2(totals.netSales / totals.orderCount) : 0,
+      cost: round2(cost),
+      grossProfit: round2(costedRevenue - cost),
+      grossMarginPercent: costedRevenue
+        ? round2(((costedRevenue - cost) / costedRevenue) * 100)
+        : 0,
+      salesWithoutCost: 0,
+    },
+    byDay: [...byDay].map(([date, value]) => ({ date, ...value })),
+    byItem: [...byItem.values()].sort((a, b) => b.amount - a.amount),
+    byCategory: [...byCategory.values()].sort((a, b) => b.amount - a.amount),
+    byCashier: [...byCashier.values()].sort((a, b) => b.netSales - a.netSales),
+    byPaymentMethod: [...byPayment.values()].sort((a, b) => b.netSales - a.netSales),
+  }
 }
 
 /**
@@ -402,9 +531,15 @@ const auditLog: AuditEntry[] = [
   },
 ]
 
-const conflict = (detail: string): MockResult => ({
-  status: 409,
-  data: { title: 'Conflict', status: 409, detail },
+/** A refusal like the API's: the stable code the app translates, and the English detail. */
+const problem = (
+  status: 400 | 409,
+  code: string,
+  detail: string,
+  params?: Record<string, string | number>,
+): MockResult => ({
+  status,
+  data: { title: status === 409 ? 'Conflict' : 'Bad Request', status, detail, code, params },
 })
 
 export const dataRoutes: MockRoute[] = [
@@ -432,7 +567,9 @@ export const dataRoutes: MockRoute[] = [
       const input = body as CreateUser
       const email = input.email.trim().toLowerCase()
       if (users.some((user) => user.email === email)) {
-        return conflict(`A user with email ${email} already exists.`)
+        return problem(409, 'user_email_taken', `A user with email ${email} already exists.`, {
+          email,
+        })
       }
       const user: ManagedUser = {
         id: crypto.randomUUID(),
@@ -459,7 +596,7 @@ export const dataRoutes: MockRoute[] = [
         user.role === 'Owner' && user.isActive && (role !== 'Owner' || !isActive)
       const otherOwner = users.some((u) => u.id !== user.id && u.role === 'Owner' && u.isActive)
       if (losesOwnership && !otherOwner) {
-        return conflict('The shop must keep at least one active owner.')
+        return problem(409, 'last_owner', 'The shop must keep at least one active owner.')
       }
       Object.assign(user, { name: changes.name?.trim() ?? user.name, role, isActive })
       return { status: 200, data: { ...user } }
@@ -519,14 +656,93 @@ export const dataRoutes: MockRoute[] = [
   ],
   [
     'POST',
+    '/inventory/:id/image',
+    ({ params, body }) => {
+      const item = items.find((candidate) => candidate.id === params.id)
+      if (!item) return notFound
+      const file = (body as FormData).get('file') as File
+      // The mock cannot look inside the file: only its declared type is checked.
+      if (file.type && !/^image\/(jpeg|png|webp)$/.test(file.type)) {
+        return problem(400, 'image_type', 'The picture must be a JPEG, PNG or WebP file.')
+      }
+      item.imageUrl = `/api/images/mock/${uuid().replaceAll('-', '')}.jpg`
+      return { status: 200, data: { ...item } }
+    },
+  ],
+  [
+    'DELETE',
+    '/inventory/:id/image',
+    ({ params }) => {
+      const item = items.find((candidate) => candidate.id === params.id)
+      if (!item) return notFound
+      item.imageUrl = null
+      return { status: 200, data: { ...item } }
+    },
+  ],
+  [
+    'POST',
+    '/inventory/import',
+    // The mock does not read the file: its name decides the answer.
+    ({ body, query }) => {
+      const name = ((body as FormData).get('file') as File).name
+      if (name.endsWith('.txt')) {
+        return problem(400, 'import_file_type', 'The file must be .xlsx or .csv.')
+      }
+      if (name.includes('wrong')) {
+        const result: ItemImportResult = {
+          totalRows: 3,
+          toCreate: 1,
+          toUpdate: 0,
+          stockNotChanged: 0,
+          applied: false,
+          errorCount: 2,
+          errors: [
+            {
+              row: 3,
+              code: 'import_required',
+              params: { column: 'sku' },
+              message: 'sku is required.',
+            },
+            {
+              row: 4,
+              code: 'import_duplicate_sku',
+              params: { sku: 'A-001', row: 2 },
+              message: 'SKU A-001 is also on row 2.',
+            },
+          ],
+        }
+        return { status: 200, data: result }
+      }
+      const applied = String(query.dryRun) !== 'true'
+      if (applied) {
+        items.push({
+          ...items[0],
+          id: uuid(),
+          sku: `IMPORTED-${items.length}`,
+          name: 'สินค้าจากไฟล์',
+          barcode: null,
+          quantity: 10,
+        })
+      }
+      const result: ItemImportResult = {
+        totalRows: 2,
+        toCreate: 1,
+        toUpdate: 1,
+        stockNotChanged: 1,
+        applied,
+        errorCount: 0,
+        errors: [],
+      }
+      return { status: 200, data: result }
+    },
+  ],
+  [
+    'POST',
     '/inventory',
     ({ body }) => {
       const input = body as CreateInventoryItem
       if (items.some((item) => item.sku === input.sku)) {
-        return {
-          status: 409,
-          data: { title: 'Conflict', status: 409, detail: `SKU ${input.sku} already exists` },
-        }
+        return problem(409, 'sku_taken', `SKU ${input.sku} already exists`, { sku: input.sku })
       }
       const item: InventoryItem = {
         ...input,
@@ -556,6 +772,10 @@ export const dataRoutes: MockRoute[] = [
     ({ params }) => {
       const index = items.findIndex((candidate) => candidate.id === params.id)
       if (index < 0) return notFound
+      // Like the API: a bill still points at an item that was sold.
+      if (orders.some((order) => order.items.some((line) => line.inventoryItemId === params.id))) {
+        return problem(409, 'item_has_sales', 'The item has been sold, so it cannot be deleted.')
+      }
       items.splice(index, 1)
       return { status: 204 }
     },
@@ -608,14 +828,12 @@ export const dataRoutes: MockRoute[] = [
       >
       const email = changes.email?.trim().toLowerCase()
       if (email && customers.some((other) => other !== customer && other.email === email)) {
-        return {
-          status: 409,
-          data: {
-            title: 'Conflict',
-            status: 409,
-            detail: `A customer with email ${email} already exists.`,
-          },
-        }
+        return problem(
+          409,
+          'customer_email_taken',
+          `A customer with email ${email} already exists.`,
+          { email },
+        )
       }
       if (changes.firstName !== undefined) customer.firstName = changes.firstName.trim()
       if (changes.lastName !== undefined) customer.lastName = changes.lastName.trim()
@@ -672,14 +890,12 @@ export const dataRoutes: MockRoute[] = [
         const item = items.find((candidate) => candidate.id === line.inventoryItemId)
         if (!item) return notFound
         if (line.quantity > item.quantity) {
-          return {
-            status: 409,
-            data: {
-              title: 'Conflict',
-              status: 409,
-              detail: `Insufficient stock for ${item.name} (${item.quantity} left)`,
-            },
-          }
+          return problem(
+            409,
+            'insufficient_stock',
+            `Insufficient stock for ${item.name} (${item.quantity} left)`,
+            { name: item.name, available: item.quantity },
+          )
         }
       }
 
@@ -689,33 +905,18 @@ export const dataRoutes: MockRoute[] = [
       if (asked > 0) {
         const customer = customers.find((candidate) => candidate.id === request.customerId)
         if (!customer || mockShopSettings.current.pointValueBaht <= 0) {
-          return {
-            status: 400,
-            data: {
-              title: 'Bad Request',
-              status: 400,
-              detail: 'Points cannot be used on this bill.',
-            },
-          }
+          return problem(400, 'points_not_accepted', 'Points cannot be used on this bill.')
         }
         if (asked > customer.loyaltyPoints) {
-          return {
-            status: 409,
-            data: { title: 'Conflict', status: 409, detail: 'Not enough points' },
-          }
+          return problem(409, 'not_enough_points', 'Not enough points', {
+            balance: customer.loyaltyPoints,
+          })
         }
       }
 
       const order = buildOrder(request, new Date())
       if (asked > 0 && order.totalAmount - order.discountAmount - order.pointsDiscount <= 0) {
-        return {
-          status: 400,
-          data: {
-            title: 'Bad Request',
-            status: 400,
-            detail: 'The points must leave something to pay.',
-          },
-        }
+        return problem(400, 'points_leave_nothing', 'The points must leave something to pay.')
       }
       movePoints(order, 'Redeemed')
       movePoints(order, 'Earned')
@@ -794,6 +995,19 @@ export const dataRoutes: MockRoute[] = [
     'GET',
     '/subscriptions/current',
     () => (mockSubscription.current ? { status: 200, data: mockSubscription.current } : notFound),
+  ],
+
+  // Reports
+  [
+    'GET',
+    '/reports/sales',
+    ({ query }) => ({ status: 200, data: salesReport(String(query.from), String(query.to)) }),
+  ],
+  [
+    'GET',
+    '/reports/sales.xlsx',
+    // Not a real workbook: enough for the page to have a file to save.
+    () => ({ status: 200, data: new Blob(['mock workbook']) }),
   ],
 
   // Dashboard

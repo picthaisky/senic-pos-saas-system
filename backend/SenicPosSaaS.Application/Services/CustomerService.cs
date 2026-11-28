@@ -165,6 +165,7 @@ public class CustomerService : ICustomerService
         return ConcurrencyRetry.RunAsync(
             () => ChangePointsOnceAsync(customerId, type, points, description, cancellationToken),
             _repository.DiscardChanges,
+            ErrorCodes.PointsBusy,
             "The points could not be updated because the balance is changing. Please try again.");
     }
 
@@ -174,7 +175,7 @@ public class CustomerService : ICustomerService
         if (customer == null) return null;
 
         if (type == LoyaltyTransactionType.Redeemed && points > customer.LoyaltyPoints)
-            throw new ConflictException($"Not enough points: the balance is {customer.LoyaltyPoints}.");
+            throw new ConflictException(ErrorCodes.NotEnoughPoints, $"Not enough points: the balance is {customer.LoyaltyPoints}.", ("balance", customer.LoyaltyPoints));
 
         customer.LoyaltyPoints += type == LoyaltyTransactionType.Earned ? points : -points;
         customer.UpdatedAt = DateTime.UtcNow;
@@ -203,7 +204,7 @@ public class CustomerService : ICustomerService
 
         var existing = await _repository.GetByEmailAsync(email, tenantId, cancellationToken);
         if (existing != null && existing.Id != exceptCustomerId)
-            throw new ConflictException($"A customer with email {email} already exists.");
+            throw new ConflictException(ErrorCodes.CustomerEmailTaken, $"A customer with email {email} already exists.", ("email", email));
     }
 
     private static string? NormalizeEmail(string? email) => NullIfBlank(email)?.ToLower();

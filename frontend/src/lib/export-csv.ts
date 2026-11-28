@@ -36,7 +36,11 @@ export function downloadCsv<T>(
   rows: readonly T[],
   columns: readonly CsvColumn<T>[],
 ) {
-  const blob = new Blob(['﻿', toCsv(rows, columns)], { type: 'text/csv;charset=utf-8' })
+  saveFile(filename, new Blob(['\uFEFF', toCsv(rows, columns)], { type: 'text/csv;charset=utf-8' }))
+}
+
+/** Hands a file to the browser to save. */
+export function saveFile(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

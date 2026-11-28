@@ -8,20 +8,41 @@ Backend ทำตาม contract นี้ครบแล้ว และมี 
 
 ## 1. ข้อตกลงร่วม
 
-| เรื่อง           | ข้อตกลง                                                                                                    | สถานะ backend |
-| -------------- | --------------------------------------------------------------------------------------------------------- | ------------- |
-| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                   | ✅            |
-| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                              | ✅            |
-| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                  | ✅            |
-| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                   | ✅            |
-| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                 | ✅            |
-| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health` | ✅            |
-| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`)                                         | ✅            |
-| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                     | ✅            |
+| เรื่อง           | ข้อตกลง                                                                                                            | สถานะ backend |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | ------------- |
+| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                           | ✅            |
+| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                                      | ✅            |
+| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                          | ✅            |
+| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                           | ✅            |
+| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                         | ✅            |
+| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health`         | ✅            |
+| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`) พร้อม `code` และ `params` (ดูหัวข้อ "รหัสของ error") | ✅            |
+| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                             | ✅            |
 
 Status code ที่ frontend จัดการ: `400` (validation, แสดงใต้ field จาก `errors`), `401` (ลอง refresh 1 ครั้ง
 ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ),
 `429` (login ถี่หรือผิดหลายครั้งเกินไป มี header `Retry-After` เป็นวินาที)
+
+### รหัสของ error ✅
+
+Error ที่ผู้ใช้ต้องอ่านมี `code` ซึ่งเป็นชื่อคงที่ของ error และ `params` ซึ่งเป็นค่าที่ประโยคต้องใช้ ส่วน `detail` ยังเป็นประโยคภาษาอังกฤษเหมือนเดิม
+
+```jsonc
+// 409 จาก POST /api/orders
+{
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Insufficient stock for น้ำดื่ม (3 left)",
+  "code": "insufficient_stock",
+  "params": { "name": "น้ำดื่ม", "available": 3 },
+}
+```
+
+- รายการรหัสทั้งหมดอยู่ที่ `backend/SenicPosSaaS.Application/Common/ErrorCodes.cs` พร้อมชื่อของ `params` ของแต่ละรหัส
+- Frontend แปลรหัสเป็นประโยคตามภาษาของผู้ใช้จากหัวข้อ `errors` ใน `frontend/src/i18n/locales/th.json` และ `en.json`
+- รหัสเป็นสัญญา ห้ามเปลี่ยนชื่อหรือนำกลับมาใช้กับความหมายอื่น รหัสใหม่ต้องมีประโยคในทุกภาษา (test `error-codes.test.ts` ของ frontend อ่านไฟล์ของ backend แล้วล้มเมื่อขาด)
+- เมื่อไม่มี `code` หรือเป็นรหัสที่ frontend ไม่รู้จัก ผู้ใช้ภาษาไทยเห็นข้อความทั่วไปของหน้าจอนั้น ส่วนผู้ใช้ภาษาอังกฤษเห็น `detail`
+- ยังไม่มีรหัส: error ของการตรวจรูปแบบข้อมูล (`400` ที่มี `errors` รายช่อง) ซึ่งหน้าจอตรวจเองก่อนส่ง และ `401`, `403` ที่หน้าจอจัดการจาก status
 
 ### การแบ่งหน้า (paging) ✅
 
@@ -140,8 +161,14 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 | GET    | `/api/inventory/barcode/{barcode}`                     | ทุก role      | ✅    |
 | GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✅    |
 | POST   | `/api/inventory`                                       | Admin, Owner | ✅    |
+| POST   | `/api/inventory/import?dryRun=`                        | Admin, Owner | ✅    |
+| POST   | `/api/inventory/{id}/image`                            | Admin, Owner | ✅    |
+| DELETE | `/api/inventory/{id}/image`                            | Admin, Owner | ✅    |
+| GET    | `/api/images/{tenantId}/{name}`                        | ไม่ต้อง login  | ✅    |
 | PUT    | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 | DELETE | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
+
+`DELETE /api/inventory/{id}` ได้ `409` `item_has_sales` เมื่อสินค้าเคยอยู่ในบิล (รวมบิลที่ยกเลิก) เพราะบิลยังอ้างถึงสินค้านั้น ให้ปิดการขาย (`isActive: false`) แทน
 
 ```jsonc
 // InventoryItem
@@ -166,6 +193,60 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 `GET /api/inventory/categories` คืน array ของชื่อหมวดหมู่ที่มีใช้อยู่ เรียงตามตัวอักษร ใช้กับตัวกรองและคำแนะนำในฟอร์ม
 รายการสินค้ารองรับการแบ่งหน้า ดูหัวข้อ "การแบ่งหน้า" ในข้อ 1
+
+### รูปสินค้า ✅
+
+- `POST /api/inventory/{id}/image` รับ `multipart/form-data` ที่มีช่อง `file` เป็นรูป JPEG, PNG หรือ WebP ขนาดไม่เกิน 2 MB ตอบเป็น `InventoryItem` ที่ `imageUrl` เป็นที่อยู่ของรูปใหม่ เช่น `/api/images/{tenantId}/3f2c…9a.jpg`
+- ชนิดของรูปตัดสินจากเนื้อหาของไฟล์ ไม่ใช่จากชื่อหรือ `Content-Type` ที่ส่งมา ไฟล์ที่ไม่ใช่รูปสามชนิดนี้ (รวม SVG และ HTML) ได้ `400` `image_type` และไฟล์ที่ใหญ่เกินได้ `400` `image_too_large`
+- รูปใหม่ได้ชื่อใหม่ทุกครั้ง และไฟล์ของรูปเดิมถูกลบ `DELETE /api/inventory/{id}/image` ลบรูปและตั้ง `imageUrl` เป็น `null`
+- `GET /api/images/{tenantId}/{name}` **ไม่ต้อง login** เพราะ `<img>` ส่ง token ไม่ได้ ชื่อรูปเป็นเลขสุ่ม 32 หลักที่เดาไม่ได้ และรูปสินค้าไม่ใช่ข้อมูลลับ ตอบพร้อม `Cache-Control: immutable` และ `X-Content-Type-Options: nosniff`
+- Frontend ย่อรูปให้ด้านยาวไม่เกิน 800 พิกเซลและแปลงเป็น JPEG ก่อนส่ง server ไม่แก้ไขรูป
+- รูปเก็บบนดิสก์ของ server (volume `uploads`) ไม่อยู่ในไฟล์สำรองของฐานข้อมูล ดู `deploy/README.md`
+- การลบสินค้าลบไฟล์รูปของสินค้านั้นด้วย
+- `imageUrl` ใน body ของ `POST` และ `PUT /api/inventory` **ถูกละเว้น** รูปตั้งได้ด้วยการอัปโหลดเท่านั้น เพื่อไม่ให้สินค้าสองรายการชี้ไปที่ไฟล์เดียวกัน
+- รูปที่เครื่องเคยแสดงแล้วถูกเก็บโดย service worker (สูงสุด 400 รูป) หน้าขายจึงแสดงรูปได้ตอนออฟไลน์ รูปที่ยังไม่เคยแสดงบนเครื่องนั้นไม่มีตอนออฟไลน์
+
+### นำเข้าสินค้าจากไฟล์ ✅
+
+`POST /api/inventory/import` รับ `multipart/form-data` ที่มีช่อง `file` เป็นไฟล์ `.xlsx` (แผ่นงานแรก) หรือ `.csv` (คั่นด้วย comma; อ่านเป็น UTF-8 และถ้าไม่ใช่ UTF-8 อ่านเป็น Windows-874 ซึ่งเป็น "CSV" ธรรมดาของ Excel บน Windows ภาษาไทย) ขนาดไม่เกิน 5 MB และไม่เกิน 5,000 แถว
+
+- แถวแรกเป็นชื่อคอลัมน์ ใช้ชื่อภาษาไทยหรืออังกฤษตามที่หน้าจอส่งออกได้: `SKU`, `ชื่อสินค้า`/`Name`, `บาร์โค้ด`/`Barcode`, `หมวดหมู่`/`Category`, `ราคาขาย`/`Price`, `ต้นทุน`/`Cost`, `คงเหลือ`/`In stock`/`Quantity`, `จุดสั่งซื้อ`/`Reorder point` ต้องมี SKU ชื่อสินค้า และราคาขาย คอลัมน์อื่นที่ไม่รู้จักถูกข้าม
+- **SKU ใหม่** ถูกเพิ่มเป็นสินค้า ช่องที่ว่างได้ค่า 0 หรือว่าง
+- **SKU ที่มีอยู่แล้ว** ถูกแก้ชื่อ ราคา และช่องอื่นที่ไฟล์มีค่า **แต่จำนวนคงเหลือไม่เปลี่ยน** เพราะสต็อกเปลี่ยนจากการขายและการปรับที่มีประวัติ ไฟล์ที่ส่งออกไว้ก่อนหน้าจึงไม่ย้อนยอดขายที่เกิดหลังจากนั้น ช่องที่ว่างหรือคอลัมน์ที่ไม่มีในไฟล์คงค่าเดิมของสินค้า
+- **ทั้งไฟล์หรือไม่มีเลย:** ถ้ามีแถวใดผิด ไม่มีสินค้าใดถูกบันทึก
+- `dryRun=true` ตรวจอย่างเดียว ไม่บันทึก หน้าจอเรียกแบบนี้ก่อนเสมอ
+
+```jsonc
+// 200
+{
+  "totalRows": 120, // แถวที่มีข้อมูล ไม่นับแถวว่าง
+  "toCreate": 100,
+  "toUpdate": 20,
+  "stockNotChanged": 3, // แถวของสินค้าเดิมที่จำนวนในไฟล์ไม่ตรงกับคงเหลือปัจจุบัน
+  "applied": false, // true เมื่อบันทึกแล้ว
+  "errorCount": 2,
+  "errors": [
+    // สูงสุด 200 รายการแรก; row คือเลขแถวตามที่เห็นในโปรแกรมตาราง
+    {
+      "row": 14,
+      "code": "import_required",
+      "params": { "column": "name" },
+      "message": "name is required.",
+    },
+    {
+      "row": 20,
+      "code": "import_duplicate_sku",
+      "params": { "sku": "A-001", "row": 5 },
+      "message": "…",
+    },
+  ],
+}
+```
+
+- ไฟล์ที่ใช้ไม่ได้ทั้งไฟล์ได้ `400` พร้อม `code`: `import_file_type`, `import_file_unreadable`, `import_file_empty`, `import_missing_column`, `import_too_many_rows`
+- ข้อผิดพลาดรายแถว: `import_required`, `import_too_long`, `import_not_a_number`, `import_not_whole`, `import_duplicate_sku`, `import_duplicate_barcode`, `barcode_taken` ค่า `column` ใน `params` เป็นชื่อ field ของสินค้า (`sku`, `name`, `price`, …)
+- บาร์โค้ดที่สินค้าอื่นของร้านใช้อยู่ถูกปฏิเสธ แม้ไฟล์เดียวกันจะย้ายบาร์โค้ดออกจากสินค้านั้น ต้องล้างบาร์โค้ดเดิมก่อน
+- ยังไม่รองรับ: รูปสินค้า, การปิดใช้งานสินค้าจากไฟล์, และไฟล์ `.xls` รุ่นเก่า
 
 ## 4. Customers
 
@@ -334,6 +415,72 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 ```
 
 ค่าเริ่มต้นเมื่อไม่ส่ง `from` และ `to` คือ 7 วันล่าสุด ช่วงยาวสุดที่ขอได้คือ 366 วัน
+
+### รายงานยอดขาย ✅
+
+| Method | Path                                      | Role                 |
+| ------ | ----------------------------------------- | -------------------- |
+| GET    | `/api/reports/sales?from=&to=`            | Admin, Owner, Viewer |
+| GET    | `/api/reports/sales.xlsx?from=&to=&lang=` | Admin, Owner, Viewer |
+
+`from` และ `to` เป็นวันที่ `yyyy-MM-dd` ตามเวลาของร้าน นับรวมทั้งสองวัน ค่าเริ่มต้นคือ 30 วันล่าสุด ช่วงยาวสุด 366 วัน ช่วงที่ผิดได้ `400`
+
+```jsonc
+{
+  "from": "2026-11-01",
+  "to": "2026-11-28",
+  "totals": {
+    "orderCount": 87,
+    "netSales": 15230.5, // ยอดที่ลูกค้าจ่าย
+    "taxAmount": 996.39, // VAT ที่อยู่ในหรือบวกเพิ่มจากยอดขาย
+    "discounts": 420.0, // ส่วนลดรายสินค้า + ส่วนลดท้ายบิล + ส่วนลดจากแต้ม
+    "averageOrderValue": 175.06,
+    "cancelledCount": 2, // บิลที่ยกเลิกในช่วงนี้ ไม่อยู่ในตัวเลขอื่น
+    "cost": 8120.0, // ต้นทุนของสินค้าที่ขาย เฉพาะรายการที่มีต้นทุนบันทึกไว้
+    "grossProfit": 6114.11, // ยอดขายไม่รวม VAT หลังส่วนลดทุกชนิด ลบ cost
+    "grossMarginPercent": 42.95,
+    "salesWithoutCost": 0, // ยอดขาย (ไม่รวม VAT) ของรายการที่ไม่มีต้นทุน ไม่อยู่ใน cost และ grossProfit
+  },
+  "byDay": [{ "date": "2026-11-01", "orderCount": 3, "netSales": 540.0 }], // ทุกวันในช่วง รวมวันที่ไม่มียอด
+  "byItem": [
+    {
+      "inventoryItemId": "…",
+      "name": "…",
+      "category": "เครื่องดื่ม",
+      "quantity": 12,
+      "amount": 240.0,
+      "cost": 120.0, // null เมื่อไม่มีรายการที่รู้ต้นทุน
+      "profit": 104.3,
+    },
+  ],
+  "byCategory": [
+    {
+      "category": null,
+      "quantity": 3,
+      "amount": 15.0,
+      "cost": 7.5,
+      "profit": 6.52,
+    },
+  ], // null = สินค้าที่ไม่มีหมวดหมู่
+  "byCashier": [
+    { "userId": "…", "name": "สมหญิง", "orderCount": 40, "netSales": 7000.0 },
+  ],
+  "byPaymentMethod": [
+    { "paymentMethod": "Cash", "orderCount": 60, "netSales": 9000.0 },
+  ],
+}
+```
+
+- นับเฉพาะบิลสถานะ `Completed` และทุกยอดรวมในฐานข้อมูล ไม่โหลดบิลเข้า memory
+- `amount` ของสินค้าและหมวดหมู่เป็นยอดของรายการหลังส่วนลดรายสินค้า ก่อนส่วนลดท้ายบิลและแต้ม จึงรวมกันแล้วอาจไม่เท่า `netSales`
+- **กำไรขั้นต้น:** บิลเก็บต้นทุนต่อหน่วยของสินค้า ณ เวลาที่ขาย การแก้ต้นทุนของสินค้าทีหลังจึงไม่เปลี่ยนกำไรของบิลเก่า
+  รายได้ของแต่ละรายการคือส่วนแบ่งของยอดบิลที่ไม่รวม VAT และหักส่วนลดทุกชนิดแล้ว: `subtotal × (netAmount − taxAmount) ÷ totalAmount`
+  ส่วนลดท้ายบิลและแต้มจึงถูกเฉลี่ยให้ทุกรายการตามยอด และ `profit` ของทุกสินค้ารวมกันเท่ากับ `grossProfit`
+- รายการที่ไม่มีต้นทุน คือรายการที่ต้นทุนของสินค้าเป็น 0 (ยังไม่ได้กรอก) ตอนขาย หรือขายก่อนระบบเริ่มเก็บต้นทุน ต้นทุน 0 ไม่ถูกนับว่าเป็นของฟรี เพราะจะทำให้ราคาขายทั้งหมดกลายเป็นกำไร รายการเหล่านี้ ไม่ถูกนับใน `cost` และ `grossProfit`, ยอดของรายการเหล่านี้อยู่ใน `salesWithoutCost`, และ `cost`, `profit` ของสินค้าหรือหมวดหมู่ที่ไม่มีรายการที่รู้ต้นทุนเลยเป็น `null`
+- กำไรขั้นต้นยังไม่หักค่าใช้จ่ายอื่นของร้าน และต้นทุนไม่ถูกส่งออกใน `Order` พนักงานขายจึงไม่เห็น
+- ทุกรายการเรียงจากยอดมากไปน้อย ยกเว้น `byDay` ที่เรียงตามวัน
+- `byCashier` มาจากผู้ใช้ที่บันทึกการขาย ซึ่งเก็บไว้กับบิล (`soldByName` ใน `Order`) บิลที่สร้างก่อนมีข้อมูลนี้มี `userId` และ `name` เป็น `null`
+- `sales.xlsx` เป็นรายงานเดียวกันในไฟล์ Excel แผ่นงานละมุมมอง ตัวเลขเป็นค่าตัวเลขจริง `lang` เป็น `th` (ค่าเริ่มต้น) หรือ `en`
 
 ## 7. Subscriptions และ Health
 

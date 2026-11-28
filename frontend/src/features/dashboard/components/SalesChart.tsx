@@ -8,7 +8,13 @@ import type { DailySales } from '../api'
 const SERIES = 'var(--app-primary)'
 const AXIS_TEXT = { fill: 'var(--app-muted)', fontSize: 12 }
 
-export function SalesChart({ data }: { data: DailySales[] }) {
+interface SalesChartProps {
+  data: DailySales[]
+  /** False where the page shows the same figures in a table of its own. */
+  withTable?: boolean
+}
+
+export function SalesChart({ data, withTable = true }: SalesChartProps) {
   const { t } = useTranslation()
   // With many days, label only some ticks so they do not collide.
   const tickInterval = data.length > 14 ? Math.ceil(data.length / 10) - 1 : 0
@@ -60,25 +66,27 @@ export function SalesChart({ data }: { data: DailySales[] }) {
       </div>
 
       {/* Same data as a table for screen readers; the chart above is hidden from them. */}
-      <table className="sr-only">
-        <caption>{t('dashboard.salesByDay')}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t('dashboard.date')}</th>
-            <th scope="col">{t('dashboard.totalSales')}</th>
-            <th scope="col">{t('dashboard.orders')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((day) => (
-            <tr key={day.date}>
-              <th scope="row">{formatDay(day.date)}</th>
-              <td>{formatCurrency(day.total)}</td>
-              <td>{formatNumber(day.orderCount)}</td>
+      {withTable && (
+        <table className="sr-only">
+          <caption>{t('dashboard.salesByDay')}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{t('dashboard.date')}</th>
+              <th scope="col">{t('dashboard.totalSales')}</th>
+              <th scope="col">{t('dashboard.orders')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((day) => (
+              <tr key={day.date}>
+                <th scope="row">{formatDay(day.date)}</th>
+                <td>{formatCurrency(day.total)}</td>
+                <td>{formatNumber(day.orderCount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </>
   )
 }

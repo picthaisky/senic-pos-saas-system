@@ -16,6 +16,31 @@ export interface InventoryItem {
   createdAt: string
 }
 
+/** Answer of POST /inventory/import (docs/API_REFERENCE.md, "นำเข้าสินค้าจากไฟล์"). */
+export interface ItemImportResult {
+  totalRows: number
+  /** Rows whose SKU is new. */
+  toCreate: number
+  /** Rows whose SKU exists: the item's details are replaced, its stock is not. */
+  toUpdate: number
+  /** Of `toUpdate`, the rows whose quantity differs from the stock on hand. */
+  stockNotChanged: number
+  /** True when the items were saved; false for a check, or when a row is wrong. */
+  applied: boolean
+  errorCount: number
+  /** The first 200 errors, in the order of the file. */
+  errors: ItemImportError[]
+}
+
+export interface ItemImportError {
+  /** The row as numbered in a spreadsheet. */
+  row: number
+  /** A server error code; its sentence is in the "errors" section of the locale files. */
+  code: string
+  params: Record<string, string | number | null>
+  message: string
+}
+
 export interface InventoryFilter {
   search?: string
   category?: string

@@ -40,7 +40,7 @@ public class UserService : IUserService
         var email = dto.Email.Trim().ToLower();
         var existing = await _users.FindAsync(u => u.TenantId == tenantId && u.Email == email, cancellationToken);
         if (existing.Any())
-            throw new ConflictException($"A user with email {email} already exists.");
+            throw new ConflictException(ErrorCodes.UserEmailTaken, $"A user with email {email} already exists.", ("email", email));
 
         var user = new User
         {
@@ -68,7 +68,7 @@ public class UserService : IUserService
 
         // Nobody can take away their own access by mistake; another manager has to do it.
         if (userId == actingUserId && (newRole != user.Role || !newActive))
-            throw new ConflictException("You cannot change your own role or deactivate your own account.");
+            throw new ConflictException(ErrorCodes.CannotChangeOwnAccount, "You cannot change your own role or deactivate your own account.");
 
         // The shop must always have someone who can manage it.
         var losesOwnership = user.Role == UserRole.Owner && user.IsActive && (newRole != UserRole.Owner || !newActive);
@@ -78,7 +78,7 @@ public class UserService : IUserService
                 u => u.TenantId == user.TenantId && u.Role == UserRole.Owner && u.IsActive && u.Id != user.Id,
                 cancellationToken);
             if (!owners.Any())
-                throw new ConflictException("The shop must keep at least one active owner.");
+                throw new ConflictException(ErrorCodes.LastOwner, "The shop must keep at least one active owner.");
         }
 
         var deactivating = user.IsActive && !newActive;

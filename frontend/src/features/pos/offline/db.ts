@@ -1,3 +1,4 @@
+import { messageForCode } from '@/lib/api'
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb'
 import type { InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder } from '../types'
@@ -21,7 +22,16 @@ export interface QueuedOrder {
   createdAt: string
   /** 'failed' = the server answered and refused it (e.g. stock ran out); needs a person. */
   status: 'pending' | 'failed'
+  /** Why the server refused it, as text in the language in use at that moment. */
   error?: string
+  /** The same as a server error code with its values, to say it in the language in use now. */
+  errorCode?: string
+  errorParams?: Record<string, string | number | null>
+}
+
+/** Why the server refused the bill, in the current language when the reason has a code. */
+export function refusalOf(order: QueuedOrder): string | undefined {
+  return messageForCode(order.errorCode, order.errorParams) ?? order.error
 }
 
 interface PosDb extends DBSchema {

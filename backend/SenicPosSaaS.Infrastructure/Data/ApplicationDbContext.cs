@@ -144,6 +144,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
             entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
             entity.Property(e => e.PointsDiscount).HasPrecision(18, 2);
+            entity.Property(e => e.SoldByName).HasMaxLength(200);
 
             entity.HasOne(e => e.Customer)
                 .WithMany(c => c.Orders)
@@ -160,6 +161,7 @@ public class ApplicationDbContext : DbContext
         // Configure OrderItem entity
         modelBuilder.Entity<OrderItem>(entity =>
         {
+            entity.Property(e => e.UnitCost).HasPrecision(18, 2);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
             entity.Property(e => e.Discount).HasPrecision(18, 2);

@@ -143,6 +143,7 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   await expect(paper.getByRole('rowheader', { name: new RegExp(item.name) })).toBeVisible()
   await expect(paper.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
   await expect(paper.getByText('เอกสารนี้ไม่ใช่ใบกำกับภาษี')).toBeVisible()
+  await expect(paper.getByText('พนักงานขาย')).toBeVisible()
   await expect(cart).toBeHidden()
   await shot(page, '05b-receipt-print')
   await page.emulateMedia({ media: 'screen' })
@@ -339,7 +340,186 @@ test('uses the points of a customer as a discount at the till', async ({ page })
   const history = page.getByRole('region', { name: 'ประวัติแต้ม' })
   await expect(history.getByText(/ใช้เป็นส่วนลด ORD-/)).toBeVisible()
   await expect(history.getByText(/จากการขาย ORD-/)).toBeVisible()
-  await expect(page.getByRole('row', { name: new RegExp(customer) }).getByText('21')).toBeVisible()
+  // An exact cell: the customer's generated name may contain the same digits.
+  await expect(
+    page
+      .getByRole('row', { name: new RegExp(customer) })
+      .getByRole('cell', { name: '21', exact: true }),
+  ).toBeVisible()
+})
+
+test('opens the sales report and downloads it as a spreadsheet', async ({ page }) => {
+  await signIn(page)
+  await page.getByRole('link', { name: 'รายงาน', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'รายงาน', exact: true })).toBeVisible()
+
+  // The earlier tests sold in this shop, so there are sales to report.
+  const totals = page.getByRole('region', { name: 'สรุปยอด' })
+  await expect(totals.getByText('ยอดขายสุทธิ')).toBeVisible()
+  await expect(page.getByRole('table', { name: 'ตามวัน' }).getByRole('row')).toHaveCount(31)
+  await shot(page, '16-reports')
+
+  await page.getByRole('button', { name: 'ตามสินค้า' }).click()
+  await expect(
+    page
+      .getByRole('table', { name: 'ตามสินค้า' })
+      .getByText(/สินค้า E2E/)
+      .first(),
+  ).toBeVisible()
+  // Every bill of this run was sold with its cost on it, so the profit covers them all.
+  await expect(totals.getByText('กำไรขั้นต้น')).toBeVisible()
+  await expect(page.getByText(/ก่อนระบบเริ่มเก็บต้นทุน/)).toHaveCount(0)
+  await expect(
+    page.getByRole('table', { name: 'ตามสินค้า' }).getByRole('columnheader', { name: 'ต้นทุน' }),
+  ).toBeVisible()
+  await shot(page, '16a-reports-items')
+  await page.getByRole('button', { name: 'ตามพนักงาน' }).click()
+  // Every bill of this run was sold by the signed-in owner, so nobody is "not recorded".
+  const cashiers = page.getByRole('table', { name: 'ตามพนักงาน' })
+  await expect(cashiers.getByRole('row')).toHaveCount(2)
+  await expect(cashiers.getByText('ไม่ระบุ')).toHaveCount(0)
+  await shot(page, '16b-reports-cashier')
+
+  const downloading = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'ดาวน์โหลด .xlsx' }).click()
+  const download = await downloading
+  expect(download.suggestedFilename()).toMatch(/^sales-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.xlsx$/)
+  // An .xlsx file is a zip: it starts with "PK".
+  const file = readFileSync(await download.path())
+  expect(file.subarray(0, 2).toString()).toBe('PK')
+  expect(file.length).toBeGreaterThan(2000)
+})
+
+test('explains a refusal of the server in Thai', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '10', quantity: '1' })
+  const sku = `E2E-${item.barcode.slice(2)}`
+
+  // The same SKU again: the server refuses, and names the error for the app to translate.
+  await page.getByRole('button', { name: 'เพิ่มสินค้า' }).click()
+  const dialog = page.getByRole('dialog', { name: 'เพิ่มสินค้า' })
+  await dialog.getByLabel('ชื่อสินค้า').fill('สินค้าซ้ำ')
+  await dialog.getByLabel('SKU').fill(sku)
+  await dialog.getByLabel('ราคาขาย').fill('10')
+  await dialog.getByLabel('ต้นทุน').fill('1')
+  await dialog.getByLabel('คงเหลือ').fill('1')
+  await dialog.getByLabel('จุดสั่งซื้อ').fill('0')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText(`มี SKU ${sku} อยู่แล้ว`)).toBeVisible()
+  await shot(page, '17-error-thai')
+})
+
+test('imports items from a file, after showing what is wrong with a bad one', async ({ page }) => {
+  await signIn(page)
+  const id = `${Date.now()}`.slice(-8)
+  await page.getByRole('link', { name: 'สินค้าคงคลัง' }).click()
+  await page.getByRole('button', { name: 'นำเข้าจากไฟล์' }).click()
+  const dialog = page.getByRole('dialog', { name: 'นำเข้าสินค้าจากไฟล์' })
+  const csv = (text: string) => ({
+    name: 'items.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(text),
+  })
+
+  // A row without a name and with a price that is not a number: nothing can be saved.
+  await dialog
+    .getByLabel('ไฟล์สินค้า')
+    .setInputFiles(csv(`SKU,ชื่อสินค้า,ราคาขาย\nIMP-${id}-1,ของดี,10\nIMP-${id}-2,,สิบบาท\n`))
+  await expect(dialog.getByText(/พบ 2 ข้อผิดพลาด/)).toBeVisible()
+  const errors = dialog.getByRole('table', { name: 'ข้อผิดพลาดในไฟล์' })
+  await expect(errors.getByText('ต้องกรอก ชื่อสินค้า')).toBeVisible()
+  await expect(errors.getByText('ราคาขาย ต้องเป็นตัวเลขที่ไม่ติดลบ')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'นำเข้า', exact: true })).toBeDisabled()
+  await shot(page, '18-import-errors')
+
+  // The corrected file: checked, then saved by the button.
+  await dialog
+    .getByLabel('ไฟล์สินค้า')
+    .setInputFiles(
+      csv(
+        `SKU,ชื่อสินค้า,หมวดหมู่,ราคาขาย,ต้นทุน,คงเหลือ\nIMP-${id}-1,นำเข้า ${id} ก,ของแห้ง,10,6,5\nIMP-${id}-2,นำเข้า ${id} ข,ของแห้ง,"1,250.50",900,2\n`,
+      ),
+    )
+  await expect(dialog.getByText(/ตรวจแล้วไม่พบข้อผิดพลาด/)).toBeVisible()
+  await shot(page, '18b-import-ready')
+  await dialog.getByRole('button', { name: 'นำเข้า 2 รายการ' }).click()
+  await expect(page.getByText('นำเข้าแล้ว: สินค้าใหม่ 2 รายการ แก้ไข 0 รายการ')).toBeVisible()
+  await expect(dialog).toBeHidden()
+
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(`นำเข้า ${id}`)
+  const row = page.getByRole('row', { name: new RegExp(`นำเข้า ${id} ข`) })
+  await expect(row.getByText('฿1,250.50')).toBeVisible()
+  await expect(page.getByRole('row', { name: new RegExp(`นำเข้า ${id}`) })).toHaveCount(2)
+})
+
+test('gives an item a picture, which the till then shows', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '45', quantity: '3' })
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
+  await page.getByRole('button', { name: `แก้ไข ${item.name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขสินค้า' })
+
+  // A real picture, larger than the app keeps: 1600 x 1200, drawn here.
+  const big = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1600
+    canvas.height = 1200
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#2563eb'
+    context.fillRect(0, 0, 1600, 1200)
+    context.fillStyle = '#ffffff'
+    context.fillRect(400, 300, 800, 600)
+    const blob = await new Promise<Blob>((resolve) =>
+      canvas.toBlob((b) => resolve(b!), 'image/png'),
+    )
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  })
+  await dialog
+    .getByLabel('รูปสินค้า')
+    .setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(big) })
+  await expect(dialog.getByRole('img')).toBeVisible()
+  await shot(page, '19-item-picture')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกสินค้าแล้ว')).toBeVisible()
+
+  // The list shows it. It was made smaller and turned into a JPEG before it was sent.
+  const thumbnail = page.getByRole('row', { name: new RegExp(item.name) }).locator('img')
+  await expect(thumbnail).toHaveAttribute('src', /^\/api\/images\/[0-9a-f-]+\/[0-9a-f]{32}\.jpg$/)
+  const size = await thumbnail.evaluate(async (img: HTMLImageElement) => {
+    await img.decode()
+    return [img.naturalWidth, img.naturalHeight]
+  })
+  expect(size).toEqual([800, 600])
+
+  // The till shows the same picture on the item's card.
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  const search = page.getByLabel('ค้นหาสินค้า')
+  await search.fill(item.name)
+  await search.press('Enter')
+  const card = page.getByRole('button', { name: new RegExp(item.name) }).first()
+  await expect(card.locator('img')).toHaveAttribute('src', /\.jpg$/)
+  await shot(page, '19b-pos-picture')
+
+  // The picture has been shown once, so the device keeps it: the till still has it offline.
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.reload()
+  await search.fill(item.name)
+  await search.press('Enter')
+  await expect(card.locator('img')).toHaveAttribute('src', /.jpg$/)
+  await page.context().setOffline(true)
+  try {
+    await page.reload()
+    await page.getByLabel('ค้นหาสินค้า').fill(item.name)
+    await page.getByLabel('ค้นหาสินค้า').press('Enter')
+    const offlineCard = page.getByRole('button', { name: new RegExp(item.name) }).first()
+    const shown = await offlineCard.locator('img').evaluate(async (img: HTMLImageElement) => {
+      await img.decode()
+      return img.naturalWidth
+    })
+    expect(shown).toBe(800)
+  } finally {
+    await page.context().setOffline(false)
+  }
 })
 
 test('updates another open window when a sale happens', async ({ page, context }) => {
@@ -447,6 +627,8 @@ test('adds a cashier who signs in, changes their password, and is later deactiva
 test('shows a stock correction in the change history', async ({ page }) => {
   await signIn(page)
   const item = await addItem(page, { price: '15', quantity: '4' })
+  // The list is paged: look the item up instead of counting on it being on the first page.
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
   await page.getByRole('button', { name: `แก้ไข ${item.name}` }).click()
   const dialog = page.getByRole('dialog', { name: 'แก้ไขสินค้า' })
   await dialog.getByLabel('คงเหลือ').fill('9')

@@ -1,4 +1,13 @@
-import { Download, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
+import {
+  Download,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  TriangleAlert,
+  FileUp,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -27,6 +36,7 @@ import {
   useInventoryCategories,
   useInventoryPage,
 } from '../api'
+import { ImportItemsModal } from '../components/ImportItemsModal'
 import { ItemFormModal } from '../components/ItemFormModal'
 import { type InventoryItem, isLowStock } from '../types'
 
@@ -43,6 +53,7 @@ export function InventoryPage() {
   const [editing, setEditing] = useState<InventoryItem | 'new' | null>(null)
   const [deleting, setDeleting] = useState<InventoryItem | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search.trim())
   const filter = {
@@ -112,7 +123,21 @@ export function InventoryPage() {
       key: 'name',
       header: t('inventory.name'),
       sortable: true,
-      cell: (item) => <span className="font-medium">{item.name}</span>,
+      cell: (item) => (
+        <span className="flex items-center gap-3">
+          {item.imageUrl ? (
+            <img
+              src={item.imageUrl}
+              alt=""
+              loading="lazy"
+              className="size-10 shrink-0 rounded border border-border object-cover"
+            />
+          ) : (
+            <span className="size-10 shrink-0 rounded border border-dashed border-border" />
+          )}
+          <span className="font-medium">{item.name}</span>
+        </span>
+      ),
     },
     { key: 'sku', header: t('inventory.sku'), cell: (item) => item.sku },
     { key: 'barcode', header: t('inventory.barcode'), cell: (item) => item.barcode ?? '–' },
@@ -196,6 +221,10 @@ export function InventoryPage() {
             >
               {!exporting && <Download className="size-5" />}
               {t('common.exportCsv')}
+            </Button>
+            <Button variant="secondary" onClick={() => setImporting(true)}>
+              <FileUp className="size-5" />
+              {t('import.open')}
             </Button>
             <Button onClick={() => setEditing('new')}>
               <Plus className="size-5" />
@@ -311,6 +340,7 @@ export function InventoryPage() {
       >
         {t('inventory.deleteConfirm', { name: deleting?.name })}
       </ConfirmDialog>
+      {importing && <ImportItemsModal onClose={() => setImporting(false)} />}
     </>
   )
 }

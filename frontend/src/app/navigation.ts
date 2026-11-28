@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Package,
   Receipt,
+  ChartColumn,
   Settings,
   ShoppingCart,
   UserCog,
@@ -18,6 +19,7 @@ export interface NavItem {
     | 'nav.dashboard'
     | 'nav.pos'
     | 'nav.orders'
+    | 'nav.reports'
     | 'nav.inventory'
     | 'nav.customers'
     | 'nav.users'
@@ -43,6 +45,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   { path: '/pos', labelKey: 'nav.pos', icon: ShoppingCart, roles: ['Admin', 'Owner', 'Cashier'] },
   { path: '/orders', labelKey: 'nav.orders', icon: Receipt, roles: ['Admin', 'Owner', 'Viewer'] },
+  {
+    path: '/reports',
+    labelKey: 'nav.reports',
+    icon: ChartColumn,
+    roles: ['Admin', 'Owner', 'Viewer'],
+  },
   { path: '/inventory', labelKey: 'nav.inventory', icon: Package, roles: ['Admin', 'Owner'] },
   { path: '/customers', labelKey: 'nav.customers', icon: Users, roles: ['Admin', 'Owner'] },
   { path: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['Admin', 'Owner'] },

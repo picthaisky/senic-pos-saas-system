@@ -102,6 +102,8 @@ Workflow นี้ไม่แก้ stack ที่มีอยู่แล้�
 
 ## ขั้นที่ 4: ตั้งค่าการ deploy อัตโนมัติ
 
+ถ้ายังไม่ได้ตั้ง secret ของ Portainer เลย workflow `Deploy` จะ build และ push image ตามปกติ แล้วจบด้วยคำเตือน "Not deployed" โดยไม่ล้ม run ที่เป็นสีแดงบน `main` จึงหมายถึงมีบางอย่างเสียจริงเสมอ
+
 ใน environment `production` ของ GitHub เลือกแบบใดแบบหนึ่ง
 
 | แบบ             | ต้องตั้ง                                       | ผล                                                                          |
@@ -192,6 +194,19 @@ docker start <container api> <container web>
 ระบบ migrate ต่อและ smoke test ผ่านครบ ฐานข้อมูลทดสอบมีข้อมูลน้อยมากจึงใช้เวลาไม่ถึงหนึ่งวินาที
 **ยังไม่รู้เวลาที่ใช้กับข้อมูลขนาดจริง** ให้ซ้อมอีกครั้งเมื่อมีข้อมูลจริงและจดเวลาไว้
 CI ซ้อมกู้คืนลงฐานข้อมูลเปล่าทุกครั้งที่รัน (job `stack`)
+
+### รูปสินค้า
+
+รูปที่ร้านอัปโหลดเก็บใน volume `uploads` ของ container `api` **ไม่อยู่ในไฟล์สำรองของฐานข้อมูล**
+
+- เมื่อตั้งปลายทางนอก server ตามหัวข้อถัดไป `backup-offsite` คัดลอกรูปไปที่โฟลเดอร์ `uploads` ใต้ปลายทางเดียวกันทุก 5 นาที รูปที่ถูกลบในแอปยังอยู่ที่ปลายทาง
+- ถ้าไม่ตั้งปลายทาง รูปมีอยู่บน server เครื่องเดียว ถ้าดิสก์เสีย สินค้ายังอยู่ครบจากไฟล์สำรองของฐานข้อมูล แต่รูปหาย ต้องอัปโหลดใหม่
+- กู้รูปกลับบน server ใหม่ (หลังสร้าง stack ด้วยตัวแปรชุดเดิม):
+
+```bash
+docker compose -p senicpos run --rm --entrypoint sh -v senicpos_uploads:/restore backup-offsite -c \
+  'rclone copy "offsite:$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX/uploads" /restore'
+```
 
 ### เก็บสำเนานอก server
 

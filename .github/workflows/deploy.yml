@@ -91,7 +91,24 @@ jobs:
         with:
           node-version: 24
 
+      # Until Portainer is set up there is nothing to deploy to. The images are built and
+      # pushed all the same; the run says "not deployed" instead of failing, so that a red run
+      # on main always means something is broken.
+      - name: Is Portainer set up?
+        id: portainer
+        env:
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -n "$PORTAINER_API_KEY$PORTAINER_WEBHOOK_URL" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Not deployed::The images were built, but no Portainer secret is set (PORTAINER_URL and PORTAINER_API_KEY, or PORTAINER_WEBHOOK_URL). See deploy/README.md."
+            echo "**Not deployed.** The images for \`$IMAGE_TAG\` were built and pushed, but no Portainer secret is set in the \`production\` environment. See deploy/README.md." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Redeploy the stack
+        if: ${{ steps.portainer.outputs.configured == 'true' }}
         env:
           # With an API key: pins the stack to this commit's images (IMAGE_TAG).
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
@@ -103,7 +120,7 @@ jobs:
 
       - name: Wait for the new version
         # Set the HEALTH_URL variable (e.g. https://pos.example.com/health) to enable this check.
-        if: ${{ vars.HEALTH_URL != '' }}
+        if: ${{ steps.portainer.outputs.configured == 'true' && vars.HEALTH_URL != '' }}
         env:
           HEALTH_URL: ${{ vars.HEALTH_URL }}
           # Only the API path deploys an exact version; the webhook path deploys "latest",
@@ -115,7 +132,7 @@ jobs:
         # Set the SMOKE_URL variable (e.g. https://pos.example.com) to enable. Read-only: it
         # never changes data. With the SMOKE_* secrets of an Owner or Admin account it also
         # signs in and reads; without them it checks only what needs no account.
-        if: ${{ vars.SMOKE_URL != '' }}
+        if: ${{ steps.portainer.outputs.configured == 'true' && vars.SMOKE_URL != '' }}
         env:
           SMOKE_URL: ${{ vars.SMOKE_URL }}
           SMOKE_TENANT_ID: ${{ secrets.SMOKE_TENANT_ID }}

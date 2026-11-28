@@ -38,6 +38,16 @@ public class ApiFactory : WebApplicationFactory<Program>
     /// <summary>Stands in for the Web Push sender: records what would have been sent.</summary>
     public FakePushSender Push { get; } = new();
 
+    /// <summary>Where this factory's API keeps uploaded files: a folder of its own, removed afterwards.</summary>
+    public string UploadsPath { get; } = Path.Combine(Path.GetTempPath(), "senic-pos-tests", Guid.NewGuid().ToString("N"));
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing && Directory.Exists(UploadsPath))
+            Directory.Delete(UploadsPath, recursive: true);
+    }
+
     public ApiFactory()
     {
         // The refresh cookie is Secure outside Development, so the test client must use https.
@@ -49,6 +59,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Testing");
         builder.UseSetting("Jwt:Key", "integration-test-signing-key-0123456789abcdef");
         builder.UseSetting("LoginProtection:RequestsPerMinutePerIp", "100000");
+        builder.UseSetting("Storage:Path", UploadsPath);
         ConfigureSettings(builder);
 
         builder.ConfigureServices(services =>

@@ -5,6 +5,7 @@ import type {
   CreateInventoryItem,
   InventoryFilter,
   InventoryItem,
+  ItemImportResult,
   UpdateInventoryItem,
 } from './types'
 
@@ -35,6 +36,36 @@ export const inventoryApi = {
     api.put<InventoryItem>(`/inventory/${id}`, item).then((r) => r.data),
 
   remove: (id: string) => api.delete<void>(`/inventory/${id}`),
+
+  /** Sets the item's picture (JPEG, PNG or WebP) and answers with the item. */
+  setImage: (id: string, picture: Blob) => {
+    const form = new FormData()
+    form.append('file', picture, 'picture')
+    return api
+      .post<InventoryItem>(`/inventory/${id}/image`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+
+  removeImage: (id: string) =>
+    api.delete<InventoryItem>(`/inventory/${id}/image`).then((r) => r.data),
+
+  /**
+   * Items from an .xlsx or .csv file. With `dryRun` the server only says what would happen.
+   * Rejects with a coded 400 when the file itself cannot be used.
+   */
+  importFile: (file: File, dryRun: boolean) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api
+      .post<ItemImportResult>('/inventory/import', form, {
+        params: { dryRun },
+        // Without this the client would send the form as JSON.
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
 }
 
 /** Everything under this key is refetched after any inventory change (including a sale). */

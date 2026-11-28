@@ -45,6 +45,9 @@ public class InventoryItemRepository : Repository<InventoryItem>, IInventoryItem
         return new PagedList<InventoryItem>(items, total);
     }
 
+    public Task<bool> HasSalesAsync(Guid itemId, CancellationToken cancellationToken = default) =>
+        _context.Set<OrderItem>().AnyAsync(oi => oi.InventoryItemId == itemId, cancellationToken);
+
     public async Task<IReadOnlyList<string>> GetCategoriesAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         return await _dbSet
