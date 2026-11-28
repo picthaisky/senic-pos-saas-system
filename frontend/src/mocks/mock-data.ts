@@ -517,6 +517,41 @@ export const dataRoutes: MockRoute[] = [
     },
   ],
 
+  [
+    'GET',
+    '/orders',
+    ({ query }) => ({
+      status: 200,
+      data: orders
+        .filter((order) => {
+          const day = localDate(new Date(order.createdAt))
+          return (
+            (!query.from || day >= String(query.from)) &&
+            (!query.to || day <= String(query.to)) &&
+            (!query.status || order.status === query.status)
+          )
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    }),
+  ],
+  [
+    'POST',
+    '/orders/:id/cancel',
+    ({ params }) => {
+      const order = orders.find((candidate) => candidate.id === params.id)
+      if (!order) return notFound
+      // Like the API: cancelling twice does not put the stock back twice.
+      if (order.status !== 'Cancelled') {
+        order.status = 'Cancelled'
+        for (const line of order.items) {
+          const item = items.find((candidate) => candidate.id === line.inventoryItemId)
+          if (item) item.quantity += line.quantity
+        }
+      }
+      return { status: 200, data: { message: 'Order cancelled successfully' } }
+    },
+  ],
+
   // Dashboard
   [
     'GET',

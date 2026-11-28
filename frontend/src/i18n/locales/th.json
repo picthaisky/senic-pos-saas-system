@@ -38,6 +38,7 @@
   "nav": {
     "dashboard": "ภาพรวม",
     "pos": "ขายหน้าร้าน",
+    "orders": "ประวัติการขาย",
     "inventory": "สินค้าคงคลัง",
     "customers": "ลูกค้า",
     "users": "ผู้ใช้งาน",
@@ -274,6 +275,38 @@
     "orderCreated": "บันทึกการขายแล้ว",
     "orderNumber": "เลขที่บิล",
     "newSale": "ขายรายการใหม่"
+  },
+  "orders": {
+    "from": "ตั้งแต่วันที่",
+    "to": "ถึงวันที่",
+    "rangeInvalid": "ต้องไม่ก่อนวันเริ่มต้น",
+    "status": "สถานะ",
+    "allStatuses": "ทุกสถานะ",
+    "statuses": {
+      "Pending": "รอดำเนินการ",
+      "Processing": "กำลังดำเนินการ",
+      "Completed": "สำเร็จ",
+      "Cancelled": "ยกเลิกแล้ว",
+      "Refunded": "คืนเงินแล้ว"
+    },
+    "time": "เวลา",
+    "customer": "ลูกค้า",
+    "payment": "วิธีชำระ",
+    "items": "รายการสินค้า",
+    "item": "สินค้า",
+    "quantity": "จำนวน",
+    "unitPrice": "ราคาต่อหน่วย",
+    "lineTotal": "รวม",
+    "discount": "ส่วนลด",
+    "tax": "ภาษี",
+    "summary": "บิลที่สำเร็จ {{bills}} ใบ รวม {{total}}",
+    "empty": "ไม่มีบิลในช่วงเวลานี้",
+    "view": "ดูรายละเอียด",
+    "viewNamed": "ดูรายละเอียด {{number}}",
+    "cancelOrder": "ยกเลิกบิล",
+    "cancelNamed": "ยกเลิกบิล {{number}}",
+    "cancelConfirm": "ยกเลิกบิล {{number}} ยอด {{total}} ใช่หรือไม่ สินค้าในบิลจะถูกคืนเข้าสต็อก และยกเลิกแล้วเปลี่ยนกลับไม่ได้",
+    "cancelled": "ยกเลิกบิล {{number}} แล้ว"
   },
   "payment": {
     "Cash": "เงินสด",

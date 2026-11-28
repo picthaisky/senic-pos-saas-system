@@ -28,6 +28,13 @@ export function formatDateTime(iso: string): string {
   )
 }
 
+/** The local calendar day as `YYYY-MM-DD`: the value of a date input and of the API's day filters. */
+export function toIsoDate(date: Date): string {
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join('-')
+}
+
 /** Day and month only, for chart ticks. Accepts a `YYYY-MM-DD` date. */
 export function formatDay(isoDate: string): string {
   return new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short' }).format(

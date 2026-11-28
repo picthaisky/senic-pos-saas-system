@@ -38,6 +38,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "pos": "Point of sale",
+    "orders": "Sales history",
     "inventory": "Inventory",
     "customers": "Customers",
     "users": "Users",
@@ -275,6 +276,39 @@
     "orderCreated": "Sale recorded",
     "orderNumber": "Order number",
     "newSale": "New sale"
+  },
+  "orders": {
+    "from": "From",
+    "to": "To",
+    "rangeInvalid": "Must not be before the start date",
+    "status": "Status",
+    "allStatuses": "All statuses",
+    "statuses": {
+      "Pending": "Pending",
+      "Processing": "Processing",
+      "Completed": "Completed",
+      "Cancelled": "Cancelled",
+      "Refunded": "Refunded"
+    },
+    "time": "Time",
+    "customer": "Customer",
+    "payment": "Payment",
+    "items": "Items",
+    "item": "Item",
+    "quantity": "Quantity",
+    "unitPrice": "Unit price",
+    "lineTotal": "Total",
+    "discount": "Discount",
+    "tax": "Tax",
+    "summary_one": "{{bills}} completed bill, {{total}} in total",
+    "summary_other": "{{bills}} completed bills, {{total}} in total",
+    "empty": "No bills in this period",
+    "view": "View details",
+    "viewNamed": "View details of {{number}}",
+    "cancelOrder": "Cancel bill",
+    "cancelNamed": "Cancel bill {{number}}",
+    "cancelConfirm": "Cancel bill {{number}} of {{total}}? Its items go back into stock, and a cancelled bill cannot be restored.",
+    "cancelled": "Bill {{number}} cancelled"
   },
   "payment": {
     "Cash": "Cash",

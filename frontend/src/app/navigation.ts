@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Package,
+  Receipt,
   ShoppingCart,
   UserCog,
   Users,
@@ -12,7 +13,13 @@ import { hasAnyRole, type Role, type User } from '@/stores/auth'
 export interface NavItem {
   path: string
   labelKey:
-    'nav.dashboard' | 'nav.pos' | 'nav.inventory' | 'nav.customers' | 'nav.users' | 'nav.audit'
+    | 'nav.dashboard'
+    | 'nav.pos'
+    | 'nav.orders'
+    | 'nav.inventory'
+    | 'nav.customers'
+    | 'nav.users'
+    | 'nav.audit'
   icon: LucideIcon
   /** Roles allowed to open the page; omitted means every signed-in user. */
   roles?: readonly Role[]
@@ -31,6 +38,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     roles: ['Admin', 'Owner', 'Viewer'],
   },
   { path: '/pos', labelKey: 'nav.pos', icon: ShoppingCart, roles: ['Admin', 'Owner', 'Cashier'] },
+  { path: '/orders', labelKey: 'nav.orders', icon: Receipt, roles: ['Admin', 'Owner', 'Viewer'] },
   { path: '/inventory', labelKey: 'nav.inventory', icon: Package, roles: ['Admin', 'Owner'] },
   { path: '/customers', labelKey: 'nav.customers', icon: Users, roles: ['Admin', 'Owner'] },
   { path: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['Admin', 'Owner'] },

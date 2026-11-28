@@ -13,6 +13,8 @@ const pages: Record<string, () => Promise<{ Component: ComponentType }>> = {
       Component: m.DashboardPage,
     })),
   '/pos': () => import('@/features/pos/pages/PosPage').then((m) => ({ Component: m.PosPage })),
+  '/orders': () =>
+    import('@/features/orders/pages/OrdersPage').then((m) => ({ Component: m.OrdersPage })),
   '/inventory': () =>
     import('@/features/inventory/pages/InventoryPage').then((m) => ({
       Component: m.InventoryPage,

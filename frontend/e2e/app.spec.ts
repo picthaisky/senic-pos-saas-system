@@ -185,6 +185,47 @@ test('keeps selling while offline and sends the sale when the connection returns
   await expect(row.getByRole('cell', { name: '9', exact: true })).toBeVisible()
 })
 
+test('finds a sale in the sales history, cancels it and gets the stock back', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '30', quantity: '5' })
+
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  await scan(page, item.barcode)
+  const cart = page.getByRole('region', { name: 'ตะกร้า' })
+  await expect(cart.getByText(item.name)).toBeVisible()
+  await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
+  const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
+  const number = (await receipt.getByText(/^ORD-/).textContent())!
+  await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
+
+  await page.getByRole('link', { name: 'ประวัติการขาย' }).click()
+  const row = page.getByRole('row', { name: new RegExp(number) })
+  // 30 + 7% tax
+  await expect(row.getByText('฿32.10')).toBeVisible()
+  await shot(page, '12-orders')
+
+  await row.getByRole('button', { name: `ดูรายละเอียด ${number}` }).click()
+  const detail = page.getByRole('dialog', { name: number })
+  await expect(detail.getByRole('rowheader', { name: item.name })).toBeVisible()
+  await shot(page, '13-order-detail')
+
+  await detail.getByRole('button', { name: 'ยกเลิกบิล' }).click()
+  const confirm = page.getByRole('dialog', { name: 'ยกเลิกบิล', exact: true })
+  await expect(confirm.getByText(/สินค้าในบิลจะถูกคืนเข้าสต็อก/)).toBeVisible()
+  await confirm.getByRole('button', { name: 'ยกเลิกบิล' }).click()
+  await expect(page.getByText(`ยกเลิกบิล ${number} แล้ว`)).toBeVisible()
+  // The open bill shows its new status and can no longer be cancelled.
+  await expect(detail.getByText('ยกเลิกแล้ว')).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'ยกเลิกบิล' })).toBeHidden()
+  await detail.getByRole('button', { name: 'ปิด', exact: true }).last().click()
+
+  // Sold one of five, cancelled: five again.
+  await page.getByRole('link', { name: 'สินค้าคงคลัง' }).click()
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
+  const stock = page.getByRole('row', { name: new RegExp(item.name) })
+  await expect(stock.getByRole('cell', { name: '5', exact: true })).toBeVisible()
+})
+
 test('updates another open window when a sale happens', async ({ page, context }) => {
   await signIn(page)
   const item = await addItem(page, { price: '100', quantity: '6', minimumStock: '5' })
