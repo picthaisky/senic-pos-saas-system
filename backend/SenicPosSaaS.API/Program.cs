@@ -173,6 +173,7 @@ builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddScoped<IPushSubscriptionRepository, PushSubscriptionRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<ISalesReportRepository, SalesReportRepository>();
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -184,6 +185,8 @@ builder.Services.AddScoped<IInventoryItemService, InventoryItemService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<ISalesReportService, SalesReportService>();
+builder.Services.AddSingleton<ISalesReportWorkbook, SenicPosSaaS.Infrastructure.Reports.SalesReportWorkbook>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 
 // CORS: only the origins listed in Cors:AllowedOrigins, with credentials so the browser sends

@@ -272,6 +272,7 @@ token, never from the URL or the request body.
 | Customers | `GET /api/customers`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`, `GET /{id}/loyalty`, `POST /{id}/loyalty/earn`, `POST /{id}/loyalty/redeem` |
 | Orders | `GET /api/orders`, `GET /{id}`, `POST`, `POST /{id}/cancel` |
 | Dashboard | `GET /api/dashboard/summary` |
+| Reports | `GET /api/reports/sales`, `GET /api/reports/sales.xlsx` |
 | Subscriptions | `GET /api/subscriptions/current`, `POST /api/subscriptions/current/renew`, `POST /api/subscriptions`, `GET /api/subscriptions/expiring` |
 | Health | `GET /health` (no sign-in) |
 

@@ -4,6 +4,8 @@ import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
+import type { SalesReport } from '@/features/reports/api'
+import { useAuthStore } from '@/stores/auth'
 import { DEFAULT_SHOP_SETTINGS, type ShopSettings } from '@/features/shop/api'
 import { billTotals, lineSubtotal, pointsDiscountOf, pointsFor } from '@/features/shop/pricing'
 import type { Subscription } from '@/features/subscription/api'
@@ -219,6 +221,7 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
     pointsEarned: customer ? pointsFor(totals.total, shop.bahtPerPoint) : 0,
     pointsRedeemed,
     pointsDiscount: totals.pointsDiscount,
+    soldByName: useAuthStore.getState().user?.name ?? 'Somchai',
     status: 'Completed',
     paymentMethod: request.paymentMethod,
     createdAt: createdAt.toISOString(),
@@ -286,6 +289,96 @@ function changePoints(
     createdAt: new Date().toISOString(),
   })
   return { status: 200, data: { ...customer } }
+}
+
+/** Like the API's sales report: completed bills of the days from..to, added up every way. */
+function salesReport(from: string, to: string): SalesReport {
+  const byDay = new Map<string, { orderCount: number; netSales: number }>()
+  for (let day = new Date(`${from}T00:00:00`); localDate(day) <= to;) {
+    byDay.set(localDate(day), { orderCount: 0, netSales: 0 })
+    day.setDate(day.getDate() + 1)
+  }
+  const byItem = new Map<string, SalesReport['byItem'][number]>()
+  const byCashier = new Map<string, SalesReport['byCashier'][number]>()
+  const byPayment = new Map<string, SalesReport['byPaymentMethod'][number]>()
+  const totals = { orderCount: 0, netSales: 0, taxAmount: 0, discounts: 0, cancelledCount: 0 }
+
+  for (const order of orders) {
+    const day = byDay.get(localDate(new Date(order.createdAt)))
+    if (!day) continue
+    if (order.status === 'Cancelled') totals.cancelledCount++
+    if (order.status !== 'Completed') continue
+
+    day.orderCount++
+    day.netSales = round2(day.netSales + order.netAmount)
+    totals.orderCount++
+    totals.netSales = round2(totals.netSales + order.netAmount)
+    totals.taxAmount = round2(totals.taxAmount + order.taxAmount)
+    totals.discounts = round2(
+      totals.discounts +
+        order.discountAmount +
+        order.pointsDiscount +
+        order.items.reduce((sum, line) => sum + line.discount, 0),
+    )
+
+    const cashier = byCashier.get(order.soldByName ?? '') ?? {
+      userId: order.soldByName,
+      name: order.soldByName,
+      orderCount: 0,
+      netSales: 0,
+    }
+    cashier.orderCount++
+    cashier.netSales = round2(cashier.netSales + order.netAmount)
+    byCashier.set(order.soldByName ?? '', cashier)
+
+    const payment = byPayment.get(order.paymentMethod) ?? {
+      paymentMethod: order.paymentMethod,
+      orderCount: 0,
+      netSales: 0,
+    }
+    payment.orderCount++
+    payment.netSales = round2(payment.netSales + order.netAmount)
+    byPayment.set(order.paymentMethod, payment)
+
+    for (const line of order.items) {
+      const entry = byItem.get(line.inventoryItemId) ?? {
+        inventoryItemId: line.inventoryItemId,
+        name: line.itemName,
+        category: items.find((item) => item.id === line.inventoryItemId)?.category ?? null,
+        quantity: 0,
+        amount: 0,
+      }
+      entry.quantity += line.quantity
+      entry.amount = round2(entry.amount + line.subtotal)
+      byItem.set(line.inventoryItemId, entry)
+    }
+  }
+
+  const byCategory = new Map<string, SalesReport['byCategory'][number]>()
+  for (const item of byItem.values()) {
+    const entry = byCategory.get(item.category ?? '') ?? {
+      category: item.category,
+      quantity: 0,
+      amount: 0,
+    }
+    entry.quantity += item.quantity
+    entry.amount = round2(entry.amount + item.amount)
+    byCategory.set(item.category ?? '', entry)
+  }
+
+  return {
+    from,
+    to,
+    totals: {
+      ...totals,
+      averageOrderValue: totals.orderCount ? round2(totals.netSales / totals.orderCount) : 0,
+    },
+    byDay: [...byDay].map(([date, value]) => ({ date, ...value })),
+    byItem: [...byItem.values()].sort((a, b) => b.amount - a.amount),
+    byCategory: [...byCategory.values()].sort((a, b) => b.amount - a.amount),
+    byCashier: [...byCashier.values()].sort((a, b) => b.netSales - a.netSales),
+    byPaymentMethod: [...byPayment.values()].sort((a, b) => b.netSales - a.netSales),
+  }
 }
 
 /**
@@ -794,6 +887,19 @@ export const dataRoutes: MockRoute[] = [
     'GET',
     '/subscriptions/current',
     () => (mockSubscription.current ? { status: 200, data: mockSubscription.current } : notFound),
+  ],
+
+  // Reports
+  [
+    'GET',
+    '/reports/sales',
+    ({ query }) => ({ status: 200, data: salesReport(String(query.from), String(query.to)) }),
+  ],
+  [
+    'GET',
+    '/reports/sales.xlsx',
+    // Not a real workbook: enough for the page to have a file to save.
+    () => ({ status: 200, data: new Blob(['mock workbook']) }),
   ],
 
   // Dashboard

@@ -53,6 +53,8 @@ export interface Order {
   /** Points the customer used on this bill, and the baht they took off. */
   pointsRedeemed: number
   pointsDiscount: number
+  /** Name of the user who recorded the sale; null on bills made before it was kept. */
+  soldByName: string | null
   status: OrderStatus
   paymentMethod: PaymentMethod
   createdAt: string

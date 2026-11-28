@@ -47,7 +47,8 @@
     "settings": "Shop settings",
     "subscription": "Subscription",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "reports": "Reports"
   },
   "topbar": {
     "switchToDark": "Switch to dark mode",
@@ -444,7 +445,8 @@
     "saved": "Total discount",
     "points": "Points earned",
     "notTaxInvoice": "This document is not a tax invoice",
-    "pointsDiscount": "Points discount ({{points}} points)"
+    "pointsDiscount": "Points discount ({{points}} points)",
+    "soldBy": "Sold by"
   },
   "offline": {
     "badge": "Offline",
@@ -502,5 +504,34 @@
     "enabled": "Notifications are on. This device will be told when stock runs low.",
     "disabled": "Notifications are off on this device",
     "blocked": "The browser is blocking notifications for this site. Allow them in the browser settings."
+  },
+  "reports": {
+    "download": "Download .xlsx",
+    "totals": "Totals",
+    "netSales": "Net sales",
+    "orders": "Bills",
+    "average": "Average per bill",
+    "discounts": "Discounts",
+    "tax": "VAT",
+    "cancelled": "Cancelled bills",
+    "view": "Report view",
+    "views": {
+      "byDay": "By day",
+      "byItem": "By item",
+      "byCategory": "By category",
+      "byCashier": "By cashier",
+      "byPaymentMethod": "By payment method"
+    },
+    "date": "Date",
+    "item": "Item",
+    "category": "Category",
+    "quantity": "Quantity",
+    "amount": "Sales",
+    "cashier": "Cashier",
+    "noCategory": "No category",
+    "unknownCashier": "Not recorded",
+    "empty": "No sales in this period",
+    "cut": "Showing the first {{shown}} of {{total}} rows. Download the file to see them all.",
+    "note": "Completed bills only. Amounts by item and category are after line discounts, before bill discounts and points, so they may not add up to net sales."
   }
 }

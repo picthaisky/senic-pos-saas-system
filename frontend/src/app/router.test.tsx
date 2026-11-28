@@ -48,6 +48,7 @@ describe('routing', () => {
       '/dashboard',
       '/pos',
       '/orders',
+      '/reports',
       '/inventory',
       '/customers',
       '/users',
@@ -78,6 +79,6 @@ describe('routing', () => {
 
     await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
-    expect(navLinks()).toEqual(['/dashboard', '/orders'])
+    expect(navLinks()).toEqual(['/dashboard', '/orders', '/reports'])
   })
 })

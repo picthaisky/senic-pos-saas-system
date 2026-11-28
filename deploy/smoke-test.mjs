@@ -119,6 +119,12 @@ if (!credentials) {
     dashboard.status === 200 && dashboard.json?.salesByDay?.length === 7,
     `status ${dashboard.status}`,
   )
+  const report = await call('GET', '/api/reports/sales')
+  check('sales report', report.status === 200 && report.json?.byDay?.length === 30, `status ${report.status}`)
+  // The spreadsheet is built on the server: an .xlsx file is a zip, which starts with "PK".
+  const workbook = await fetch(base + '/api/reports/sales.xlsx', { headers: { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) } })
+  const workbookStart = new Uint8Array(await workbook.arrayBuffer()).slice(0, 2)
+  check('sales report as a spreadsheet', workbook.status === 200 && workbookStart[0] === 0x50 && workbookStart[1] === 0x4b, `status ${workbook.status}`)
   const users = await call('GET', '/api/users')
   check(
     'user list includes the signed-in account',
@@ -220,6 +226,13 @@ if (!credentials) {
       'order list shows the customer name and sums the completed sales',
       orders.status === 200 && orders.json?.items?.some((o) => o.customerName === 'มาลี') && orders.json.completedCount === orders.json.total && orders.json.completedTotal > 0,
       `status ${orders.status}`,
+    )
+
+    const sold = await call('GET', '/api/reports/sales')
+    check(
+      'the sales report adds up the bills and names who sold them',
+      sold.status === 200 && sold.json?.totals?.orderCount >= 2 && sold.json.byItem?.length > 0 && sold.json.byCashier?.some((c) => c.name && c.orderCount >= 2),
+      `status ${sold.status}, bills ${sold.json?.totals?.orderCount}`,
     )
 
     const cancel = await call('POST', `/api/orders/${walkIn.json?.id}/cancel`)

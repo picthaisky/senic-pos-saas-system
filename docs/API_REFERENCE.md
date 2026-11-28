@@ -335,6 +335,53 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 ค่าเริ่มต้นเมื่อไม่ส่ง `from` และ `to` คือ 7 วันล่าสุด ช่วงยาวสุดที่ขอได้คือ 366 วัน
 
+### รายงานยอดขาย ✅
+
+| Method | Path                                      | Role                 |
+| ------ | ----------------------------------------- | -------------------- |
+| GET    | `/api/reports/sales?from=&to=`            | Admin, Owner, Viewer |
+| GET    | `/api/reports/sales.xlsx?from=&to=&lang=` | Admin, Owner, Viewer |
+
+`from` และ `to` เป็นวันที่ `yyyy-MM-dd` ตามเวลาของร้าน นับรวมทั้งสองวัน ค่าเริ่มต้นคือ 30 วันล่าสุด ช่วงยาวสุด 366 วัน ช่วงที่ผิดได้ `400`
+
+```jsonc
+{
+  "from": "2026-11-01",
+  "to": "2026-11-28",
+  "totals": {
+    "orderCount": 87,
+    "netSales": 15230.5, // ยอดที่ลูกค้าจ่าย
+    "taxAmount": 996.39, // VAT ที่อยู่ในหรือบวกเพิ่มจากยอดขาย
+    "discounts": 420.0, // ส่วนลดรายสินค้า + ส่วนลดท้ายบิล + ส่วนลดจากแต้ม
+    "averageOrderValue": 175.06,
+    "cancelledCount": 2, // บิลที่ยกเลิกในช่วงนี้ ไม่อยู่ในตัวเลขอื่น
+  },
+  "byDay": [{ "date": "2026-11-01", "orderCount": 3, "netSales": 540.0 }], // ทุกวันในช่วง รวมวันที่ไม่มียอด
+  "byItem": [
+    {
+      "inventoryItemId": "…",
+      "name": "…",
+      "category": "เครื่องดื่ม",
+      "quantity": 12,
+      "amount": 240.0,
+    },
+  ],
+  "byCategory": [{ "category": null, "quantity": 3, "amount": 15.0 }], // null = สินค้าที่ไม่มีหมวดหมู่
+  "byCashier": [
+    { "userId": "…", "name": "สมหญิง", "orderCount": 40, "netSales": 7000.0 },
+  ],
+  "byPaymentMethod": [
+    { "paymentMethod": "Cash", "orderCount": 60, "netSales": 9000.0 },
+  ],
+}
+```
+
+- นับเฉพาะบิลสถานะ `Completed` และทุกยอดรวมในฐานข้อมูล ไม่โหลดบิลเข้า memory
+- `amount` ของสินค้าและหมวดหมู่เป็นยอดของรายการหลังส่วนลดรายสินค้า ก่อนส่วนลดท้ายบิลและแต้ม จึงรวมกันแล้วอาจไม่เท่า `netSales`
+- ทุกรายการเรียงจากยอดมากไปน้อย ยกเว้น `byDay` ที่เรียงตามวัน
+- `byCashier` มาจากผู้ใช้ที่บันทึกการขาย ซึ่งเก็บไว้กับบิล (`soldByName` ใน `Order`) บิลที่สร้างก่อนมีข้อมูลนี้มี `userId` และ `name` เป็น `null`
+- `sales.xlsx` เป็นรายงานเดียวกันในไฟล์ Excel แผ่นงานละมุมมอง ตัวเลขเป็นค่าตัวเลขจริง `lang` เป็น `th` (ค่าเริ่มต้น) หรือ `en`
+
 ## 7. Subscriptions และ Health
 
 | Method | Path                               | Role                | สถานะ                                             |

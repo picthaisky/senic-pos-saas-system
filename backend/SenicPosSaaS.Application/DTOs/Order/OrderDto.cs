@@ -18,6 +18,8 @@ public class OrderDto
     public int PointsRedeemed { get; set; }
     /// <summary>Baht the redeemed points took off; separate from <see cref="DiscountAmount"/>.</summary>
     public decimal PointsDiscount { get; set; }
+    /// <summary>Name of the user who recorded the sale; null on older bills.</summary>
+    public string? SoldByName { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public DateTime CreatedAt { get; set; }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using SenicPosSaaS.Application.DTOs.Dashboard;
 using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Domain.Enums;
@@ -39,7 +40,7 @@ public class DashboardService : IDashboardService
             byDay.TryGetValue(day, out var sales);
             salesByDay.Add(new DailySalesDto
             {
-                Date = day.ToString("yyyy-MM-dd"),
+                Date = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 Total = sales.Total,
                 OrderCount = sales.Count
             });

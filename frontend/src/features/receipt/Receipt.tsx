@@ -54,6 +54,12 @@ export function Receipt({ order, shop }: ReceiptProps) {
             <dd>{order.customerName}</dd>
           </div>
         )}
+        {order.soldByName && (
+          <div>
+            <dt>{t('receipt.soldBy')}</dt>
+            <dd>{order.soldByName}</dd>
+          </div>
+        )}
       </dl>
 
       <table className="receipt-items">

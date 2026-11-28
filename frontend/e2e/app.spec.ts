@@ -143,6 +143,7 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   await expect(paper.getByRole('rowheader', { name: new RegExp(item.name) })).toBeVisible()
   await expect(paper.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
   await expect(paper.getByText('เอกสารนี้ไม่ใช่ใบกำกับภาษี')).toBeVisible()
+  await expect(paper.getByText('พนักงานขาย')).toBeVisible()
   await expect(cart).toBeHidden()
   await shot(page, '05b-receipt-print')
   await page.emulateMedia({ media: 'screen' })
@@ -340,6 +341,41 @@ test('uses the points of a customer as a discount at the till', async ({ page })
   await expect(history.getByText(/ใช้เป็นส่วนลด ORD-/)).toBeVisible()
   await expect(history.getByText(/จากการขาย ORD-/)).toBeVisible()
   await expect(page.getByRole('row', { name: new RegExp(customer) }).getByText('21')).toBeVisible()
+})
+
+test('opens the sales report and downloads it as a spreadsheet', async ({ page }) => {
+  await signIn(page)
+  await page.getByRole('link', { name: 'รายงาน', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'รายงาน', exact: true })).toBeVisible()
+
+  // The earlier tests sold in this shop, so there are sales to report.
+  const totals = page.getByRole('region', { name: 'สรุปยอด' })
+  await expect(totals.getByText('ยอดขายสุทธิ')).toBeVisible()
+  await expect(page.getByRole('table', { name: 'ตามวัน' }).getByRole('row')).toHaveCount(31)
+  await shot(page, '16-reports')
+
+  await page.getByRole('button', { name: 'ตามสินค้า' }).click()
+  await expect(
+    page
+      .getByRole('table', { name: 'ตามสินค้า' })
+      .getByText(/สินค้า E2E/)
+      .first(),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'ตามพนักงาน' }).click()
+  // Every bill of this run was sold by the signed-in owner, so nobody is "not recorded".
+  const cashiers = page.getByRole('table', { name: 'ตามพนักงาน' })
+  await expect(cashiers.getByRole('row')).toHaveCount(2)
+  await expect(cashiers.getByText('ไม่ระบุ')).toHaveCount(0)
+  await shot(page, '16b-reports-cashier')
+
+  const downloading = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'ดาวน์โหลด .xlsx' }).click()
+  const download = await downloading
+  expect(download.suggestedFilename()).toMatch(/^sales-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.xlsx$/)
+  // An .xlsx file is a zip: it starts with "PK".
+  const file = readFileSync(await download.path())
+  expect(file.subarray(0, 2).toString()).toBe('PK')
+  expect(file.length).toBeGreaterThan(2000)
 })
 
 test('updates another open window when a sale happens', async ({ page, context }) => {

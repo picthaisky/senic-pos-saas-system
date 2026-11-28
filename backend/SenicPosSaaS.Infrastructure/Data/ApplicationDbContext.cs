@@ -144,6 +144,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
             entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
             entity.Property(e => e.PointsDiscount).HasPrecision(18, 2);
+            entity.Property(e => e.SoldByName).HasMaxLength(200);
 
             entity.HasOne(e => e.Customer)
                 .WithMany(c => c.Orders)

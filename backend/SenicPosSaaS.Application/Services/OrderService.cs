@@ -16,6 +16,8 @@ public class OrderService : IOrderService
     private readonly ICustomerRepository _customerRepository;
     private readonly IShopSettingsService _shopSettings;
     private readonly IRepository<LoyaltyTransaction> _loyalty;
+    private readonly ICurrentUser _currentUser;
+    private readonly IRepository<User> _users;
     private readonly IRealtimeNotifier? _notifier;
 
     public OrderService(
@@ -24,6 +26,8 @@ public class OrderService : IOrderService
         ICustomerRepository customerRepository,
         IShopSettingsService shopSettings,
         IRepository<LoyaltyTransaction> loyalty,
+        ICurrentUser currentUser,
+        IRepository<User> users,
         IRealtimeNotifier? notifier = null)
     {
         _orderRepository = orderRepository;
@@ -31,6 +35,8 @@ public class OrderService : IOrderService
         _customerRepository = customerRepository;
         _shopSettings = shopSettings;
         _loyalty = loyalty;
+        _currentUser = currentUser;
+        _users = users;
         _notifier = notifier;
     }
 
@@ -85,9 +91,17 @@ public class OrderService : IOrderService
             pointsDiscount = OrderPricing.Round(dto.PointsRedeemed * settings.PointValueBaht);
         }
 
+        // Who is selling, for the receipt and the sales report. The name is copied onto the
+        // bill: renaming or removing the user later does not change old bills.
+        var seller = _currentUser.UserId.HasValue
+            ? await _users.GetByIdAsync(_currentUser.UserId.Value, cancellationToken)
+            : null;
+
         var now = DateTime.UtcNow;
         var order = new Order
         {
+            SoldByUserId = seller?.Id,
+            SoldByName = seller?.Name,
             Id = Guid.NewGuid(),
             TenantId = dto.TenantId,
             OrderNumber = GenerateOrderNumber(),
@@ -320,6 +334,7 @@ public class OrderService : IOrderService
             PointsEarned = order.PointsEarned,
             PointsRedeemed = order.PointsRedeemed,
             PointsDiscount = order.PointsDiscount,
+            SoldByName = order.SoldByName,
             Status = order.Status,
             PaymentMethod = order.PaymentMethod,
             CreatedAt = order.CreatedAt,

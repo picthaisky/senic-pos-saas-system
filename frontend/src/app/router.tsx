@@ -15,6 +15,8 @@ const pages: Record<string, () => Promise<{ Component: ComponentType }>> = {
   '/pos': () => import('@/features/pos/pages/PosPage').then((m) => ({ Component: m.PosPage })),
   '/orders': () =>
     import('@/features/orders/pages/OrdersPage').then((m) => ({ Component: m.OrdersPage })),
+  '/reports': () =>
+    import('@/features/reports/pages/ReportsPage').then((m) => ({ Component: m.ReportsPage })),
   '/inventory': () =>
     import('@/features/inventory/pages/InventoryPage').then((m) => ({
       Component: m.InventoryPage,
