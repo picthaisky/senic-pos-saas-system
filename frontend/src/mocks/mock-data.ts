@@ -1,15 +1,18 @@
 import type { Customer, LoyaltyTransaction } from '@/features/customers/types'
+import type { AuditEntry } from '@/features/audit/api'
 import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types'
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
+import { DEFAULT_SHOP_SETTINGS, type ShopSettings } from '@/features/shop/api'
+import { billTotals, lineSubtotal, pointsDiscountOf, pointsFor } from '@/features/shop/pricing'
+import type { Subscription } from '@/features/subscription/api'
 import type { MockResult, MockRoute } from './mock-api'
 
 // In-memory stand-in for the contract endpoints the backend does not serve yet
 // (docs/API_REFERENCE.md §3–6). Data resets on every page reload. It does not check roles.
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const TAX_RATE = 0.07
 const round2 = (value: number) => Math.round(value * 100) / 100
 const uuid = () => crypto.randomUUID()
 const notFound = { status: 404, data: { title: 'Not Found', status: 404 } }
@@ -105,11 +108,77 @@ const loyalty: LoyaltyTransaction[] = [
   },
 ]
 
+/** Tests replace `current` (null = the shop has none on record). */
+export const mockSubscription: { current: Subscription | null } = {
+  current: {
+    id: uuid(),
+    tenantId: 't1',
+    tenantName: 'ร้านตัวอย่าง',
+    plan: 'Pro',
+    status: 'Active',
+    startDate: new Date(Date.now() - 20 * DAY_MS).toISOString(),
+    endDate: new Date(Date.now() + 10 * DAY_MS + DAY_MS / 2).toISOString(),
+    monthlyFee: 590,
+    autoRenew: false,
+    daysUntilExpiry: 10,
+  },
+}
+
+/**
+ * Like the API: with `page` in the query the answer is one page, sorted as asked; without
+ * it, the whole list as an array (the form kept for older clients).
+ */
+function listResult<T>(
+  rows: T[],
+  query: Record<string, unknown>,
+  sortFields: Record<string, (row: T) => string | number>,
+  extra: object = {},
+): MockResult {
+  if (query.page === undefined) return { status: 200, data: rows }
+
+  const asked = typeof query.sort === 'string' ? query.sort : ''
+  const descending = asked.startsWith('-')
+  const field = descending ? asked.slice(1) : asked
+  if (field && !(field in sortFields)) {
+    return {
+      status: 400,
+      data: { title: 'Bad Request', status: 400, detail: 'Unknown sort field.' },
+    }
+  }
+  const sorted = [...rows]
+  if (field) {
+    const key = sortFields[field]
+    sorted.sort((a, b) => {
+      const [x, y] = [key(a), key(b)]
+      const order =
+        typeof x === 'number' && typeof y === 'number'
+          ? x - y
+          : String(x).localeCompare(String(y), 'th')
+      return descending ? -order : order
+    })
+  }
+  const page = Math.max(1, Number(query.page) || 1)
+  const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
+  return {
+    status: 200,
+    data: {
+      items: sorted.slice((page - 1) * pageSize, page * pageSize),
+      total: sorted.length,
+      page,
+      pageSize,
+      ...extra,
+    },
+  }
+}
+
+/** Tests replace `current`. Starts like a shop that has saved nothing: no VAT, no points. */
+export const mockShopSettings: { current: ShopSettings } = { current: { ...DEFAULT_SHOP_SETTINGS } }
+
 const orders: Order[] = []
 const ordersByClientId = new Map<string, Order>()
 let orderSequence = 1
 
-/** Same arithmetic as the backend's OrderService today: tax is 7% of the item total. */
+/** Priced like the backend: by the shop's VAT mode, discounts before tax, points for a known customer. */
 function buildOrder(request: CreateOrder, createdAt: Date): Order {
   const lines = request.items.map((line) => {
     const item = items.find((candidate) => candidate.id === line.inventoryItemId)!
@@ -120,21 +189,36 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
       quantity: line.quantity,
       unitPrice: item.price,
       discount: line.discount,
-      subtotal: round2(item.price * line.quantity - line.discount),
+      subtotal: lineSubtotal({
+        unitPrice: item.price,
+        quantity: line.quantity,
+        discount: line.discount,
+      }),
     }
   })
-  const totalAmount = round2(lines.reduce((sum, line) => sum + line.subtotal, 0))
-  const taxAmount = round2(totalAmount * TAX_RATE)
+  const shop = mockShopSettings.current
   const customer = customers.find((candidate) => candidate.id === request.customerId)
+  const pointsRedeemed = customer ? (request.pointsRedeemed ?? 0) : 0
+  const totals = billTotals(
+    lines,
+    { kind: 'amount', value: request.discountAmount },
+    shop,
+    pointsDiscountOf(pointsRedeemed, shop.pointValueBaht),
+  )
   return {
     id: uuid(),
     orderNumber: `ORD-${String(orderSequence++).padStart(5, '0')}`,
     customerId: customer?.id ?? null,
     customerName: customer?.fullName ?? '',
-    totalAmount,
-    discountAmount: request.discountAmount,
-    taxAmount,
-    netAmount: round2(totalAmount + taxAmount - request.discountAmount),
+    totalAmount: totals.itemsTotal,
+    discountAmount: totals.billDiscount,
+    taxAmount: totals.tax,
+    netAmount: totals.total,
+    vatMode: shop.vatMode,
+    vatRatePercent: shop.vatMode === 'None' ? 0 : shop.vatRatePercent,
+    pointsEarned: customer ? pointsFor(totals.total, shop.bahtPerPoint) : 0,
+    pointsRedeemed,
+    pointsDiscount: totals.pointsDiscount,
     status: 'Completed',
     paymentMethod: request.paymentMethod,
     createdAt: createdAt.toISOString(),
@@ -204,6 +288,27 @@ function changePoints(
   return { status: 200, data: { ...customer } }
 }
 
+/**
+ * The points a bill moves: used (Redeemed) and given (Earned) when it is sold, given back
+ * (Returned) and taken back (Reversed) when it is cancelled.
+ */
+function movePoints(order: Order, type: LoyaltyTransaction['type']) {
+  const customer = customers.find((candidate) => candidate.id === order.customerId)
+  const points =
+    type === 'Earned' || type === 'Reversed' ? order.pointsEarned : order.pointsRedeemed
+  if (!customer || points === 0) return
+  customer.loyaltyPoints += type === 'Earned' || type === 'Returned' ? points : -points
+  loyalty.push({
+    id: uuid(),
+    customerId: customer.id,
+    type,
+    points,
+    orderId: order.id,
+    description: order.orderNumber,
+    createdAt: new Date().toISOString(),
+  })
+}
+
 // ---------- Routes ----------
 
 // "u1" is the user the tests sign in as (src/test/render-app.tsx).
@@ -234,12 +339,90 @@ const users: ManagedUser[] = [
   },
 ]
 
+// A fixed history, newest first. The mock does not record new changes.
+const auditLog: AuditEntry[] = [
+  {
+    id: 'a5',
+    createdAt: '2026-11-27T04:10:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'InventoryItem',
+    entityId: 'i2',
+    entityLabel: 'ข้าวสาร 1 กก.',
+    changes: { quantity: { old: 3, new: 20 }, price: { old: 42, new: 45 } },
+  },
+  {
+    id: 'a4',
+    createdAt: '2026-11-26T10:30:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'Order',
+    entityId: 'o9',
+    entityLabel: 'ORD-20261126-AB12CD34',
+    changes: { status: { old: 'Completed', new: 'Cancelled' } },
+  },
+  {
+    id: 'a3',
+    createdAt: '2026-11-25T08:00:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Updated',
+    entityType: 'User',
+    entityId: 'u3',
+    entityLabel: 'wichai@shop.test',
+    changes: {
+      role: { old: 'Cashier', new: 'Viewer' },
+      isActive: { old: true, new: false },
+      passwordHash: { old: '***', new: '***' },
+    },
+  },
+  {
+    id: 'a2',
+    createdAt: '2026-11-24T03:20:00Z',
+    userId: 'gone',
+    userName: null,
+    action: 'Deleted',
+    entityType: 'Customer',
+    entityId: 'c9',
+    entityLabel: 'ลูกค้า เก่า',
+    changes: { firstName: { old: 'ลูกค้า', new: null }, lastName: { old: 'เก่า', new: null } },
+  },
+  {
+    id: 'a1',
+    createdAt: '2026-11-23T02:00:00Z',
+    userId: 'u1',
+    userName: 'Somchai',
+    action: 'Created',
+    entityType: 'InventoryItem',
+    entityId: 'i7',
+    entityLabel: 'ขนมปังแผ่น',
+    changes: { name: { old: null, new: 'ขนมปังแผ่น' }, quantity: { old: null, new: 30 } },
+  },
+]
+
 const conflict = (detail: string): MockResult => ({
   status: 409,
   data: { title: 'Conflict', status: 409, detail },
 })
 
 export const dataRoutes: MockRoute[] = [
+  // Audit trail
+  [
+    'GET',
+    '/audit-logs',
+    ({ query }) => {
+      const page = Math.max(Number(query.page ?? 1), 1)
+      const pageSize = Math.min(Math.max(Number(query.pageSize ?? 20), 1), 100)
+      const matching = auditLog.filter(
+        (entry) => !query.entityType || entry.entityType === query.entityType,
+      )
+      const items = matching.slice((page - 1) * pageSize, page * pageSize)
+      return { status: 200, data: { items, total: matching.length, page, pageSize } }
+    },
+  ],
+
   // Users
   ['GET', '/users', () => ({ status: 200, data: users.map((user) => ({ ...user })) })],
   [
@@ -304,8 +487,27 @@ export const dataRoutes: MockRoute[] = [
           (query.isActive === undefined || item.isActive === query.isActive) &&
           (!query.lowStock || item.quantity <= item.minimumStock),
       )
-      return { status: 200, data: result.map((item) => ({ ...item })) }
+      return listResult(
+        result.map((item) => ({ ...item })).sort((a, b) => a.name.localeCompare(b.name, 'th')),
+        query,
+        {
+          name: (item) => item.name,
+          sku: (item) => item.sku,
+          category: (item) => item.category ?? '',
+          price: (item) => item.price,
+          quantity: (item) => item.quantity,
+          createdAt: (item) => item.createdAt,
+        },
+      )
     },
+  ],
+  [
+    'GET',
+    '/inventory/categories',
+    () => ({
+      status: 200,
+      data: [...new Set(items.map((item) => item.category).filter((c): c is string => !!c))].sort(),
+    }),
   ],
   [
     'GET',
@@ -360,7 +562,30 @@ export const dataRoutes: MockRoute[] = [
   ],
 
   // Customers
-  ['GET', '/customers', () => ({ status: 200, data: customers.map((c) => ({ ...c })) })],
+  [
+    'GET',
+    '/customers',
+    ({ query }) => {
+      const search = typeof query.search === 'string' ? query.search : ''
+      return listResult(
+        customers
+          .filter(
+            (customer) =>
+              !search ||
+              includes(customer.fullName, search) ||
+              includes(customer.email, search) ||
+              includes(customer.phone, search),
+          )
+          .map((customer) => ({ ...customer })),
+        query,
+        {
+          name: (customer) => customer.fullName,
+          loyaltyPoints: (customer) => customer.loyaltyPoints,
+          createdAt: (customer) => customer.createdAt,
+        },
+      )
+    },
+  ],
   [
     'POST',
     '/customers',
@@ -369,6 +594,36 @@ export const dataRoutes: MockRoute[] = [
       const customer = makeCustomer(input.firstName, input.lastName, input.email, input.phone)
       customers.unshift(customer)
       return { status: 201, data: { ...customer } }
+    },
+  ],
+  [
+    'PUT',
+    '/customers/:id',
+    ({ params, body }) => {
+      const customer = customers.find((candidate) => candidate.id === params.id)
+      if (!customer) return notFound
+      // Like the API: a missing field is left alone, an empty string clears it.
+      const changes = body as Partial<
+        Record<'firstName' | 'lastName' | 'email' | 'phone' | 'address', string>
+      >
+      const email = changes.email?.trim().toLowerCase()
+      if (email && customers.some((other) => other !== customer && other.email === email)) {
+        return {
+          status: 409,
+          data: {
+            title: 'Conflict',
+            status: 409,
+            detail: `A customer with email ${email} already exists.`,
+          },
+        }
+      }
+      if (changes.firstName !== undefined) customer.firstName = changes.firstName.trim()
+      if (changes.lastName !== undefined) customer.lastName = changes.lastName.trim()
+      if (email !== undefined) customer.email = email || null
+      if (changes.phone !== undefined) customer.phone = changes.phone.trim() || null
+      if (changes.address !== undefined) customer.address = changes.address.trim() || null
+      customer.fullName = `${customer.firstName} ${customer.lastName}`.trim()
+      return { status: 200, data: { ...customer } }
     },
   ],
   [
@@ -428,7 +683,42 @@ export const dataRoutes: MockRoute[] = [
         }
       }
 
+      // Like the API: points need a customer who has them and a shop that takes them, and
+      // must leave something to pay.
+      const asked = request.pointsRedeemed ?? 0
+      if (asked > 0) {
+        const customer = customers.find((candidate) => candidate.id === request.customerId)
+        if (!customer || mockShopSettings.current.pointValueBaht <= 0) {
+          return {
+            status: 400,
+            data: {
+              title: 'Bad Request',
+              status: 400,
+              detail: 'Points cannot be used on this bill.',
+            },
+          }
+        }
+        if (asked > customer.loyaltyPoints) {
+          return {
+            status: 409,
+            data: { title: 'Conflict', status: 409, detail: 'Not enough points' },
+          }
+        }
+      }
+
       const order = buildOrder(request, new Date())
+      if (asked > 0 && order.totalAmount - order.discountAmount - order.pointsDiscount <= 0) {
+        return {
+          status: 400,
+          data: {
+            title: 'Bad Request',
+            status: 400,
+            detail: 'The points must leave something to pay.',
+          },
+        }
+      }
+      movePoints(order, 'Redeemed')
+      movePoints(order, 'Earned')
       for (const line of request.items) {
         items.find((candidate) => candidate.id === line.inventoryItemId)!.quantity -= line.quantity
       }
@@ -436,6 +726,74 @@ export const dataRoutes: MockRoute[] = [
       ordersByClientId.set(request.clientOrderId, order)
       return { status: 201, data: order }
     },
+  ],
+
+  [
+    'GET',
+    '/orders',
+    ({ query }) => {
+      const matching = orders
+        .filter((order) => {
+          const day = localDate(new Date(order.createdAt))
+          return (
+            (!query.from || day >= String(query.from)) &&
+            (!query.to || day <= String(query.to)) &&
+            (!query.status || order.status === query.status)
+          )
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const completed = matching.filter((order) => order.status === 'Completed')
+      return listResult(
+        matching,
+        query,
+        {
+          createdAt: (order) => order.createdAt,
+          netAmount: (order) => order.netAmount,
+          orderNumber: (order) => order.orderNumber,
+        },
+        {
+          completedCount: completed.length,
+          completedTotal: round2(completed.reduce((sum, order) => sum + order.netAmount, 0)),
+        },
+      )
+    },
+  ],
+  [
+    'POST',
+    '/orders/:id/cancel',
+    ({ params }) => {
+      const order = orders.find((candidate) => candidate.id === params.id)
+      if (!order) return notFound
+      // Like the API: cancelling twice does not put the stock back twice.
+      if (order.status !== 'Cancelled') {
+        order.status = 'Cancelled'
+        movePoints(order, 'Returned')
+        movePoints(order, 'Reversed')
+        for (const line of order.items) {
+          const item = items.find((candidate) => candidate.id === line.inventoryItemId)
+          if (item) item.quantity += line.quantity
+        }
+      }
+      return { status: 200, data: { message: 'Order cancelled successfully' } }
+    },
+  ],
+
+  // Shop settings
+  ['GET', '/shop-settings', () => ({ status: 200, data: { ...mockShopSettings.current } })],
+  [
+    'PUT',
+    '/shop-settings',
+    ({ body }) => {
+      mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, ...(body as ShopSettings) }
+      return { status: 200, data: { ...mockShopSettings.current } }
+    },
+  ],
+
+  // Subscription
+  [
+    'GET',
+    '/subscriptions/current',
+    () => (mockSubscription.current ? { status: 200, data: mockSubscription.current } : notFound),
   ],
 
   // Dashboard

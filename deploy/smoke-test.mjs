@@ -104,10 +104,15 @@ if (!credentials) {
   check('refresh issues a new token', refresh.status === 200 && !!refresh.json?.accessToken, `status ${refresh.status}`)
   token = refresh.json?.accessToken ?? token
 
-  const inventory = await call('GET', '/api/inventory')
-  check('inventory list', inventory.status === 200 && Array.isArray(inventory.json), `status ${inventory.status}`)
-  const customers = await call('GET', '/api/customers')
-  check('customer list', customers.status === 200 && Array.isArray(customers.json), `status ${customers.status}`)
+  const isPage = (json) => Array.isArray(json?.items) && Number.isInteger(json.total) && json.page === 1
+  const inventory = await call('GET', '/api/inventory?page=1&pageSize=5')
+  check('inventory list, one page', inventory.status === 200 && isPage(inventory.json) && inventory.json.items.length <= 5, `status ${inventory.status}`)
+  const customers = await call('GET', '/api/customers?page=1')
+  check('customer list, one page', customers.status === 200 && isPage(customers.json), `status ${customers.status}`)
+  const shop = await call('GET', '/api/shop-settings')
+  check('shop settings', shop.status === 200 && ['None', 'Inclusive', 'Exclusive'].includes(shop.json?.vatMode), `status ${shop.status}`)
+  const legacy = await call('GET', '/api/inventory')
+  check('the unpaged list still answers older clients', legacy.status === 200 && Array.isArray(legacy.json), `status ${legacy.status}`)
   const dashboard = await call('GET', '/api/dashboard/summary')
   check(
     'dashboard summary (also proves time zone data is present)',
@@ -140,8 +145,10 @@ if (!credentials) {
     const duplicate = await call('POST', '/api/inventory', { sku, name: 'dup', price: 1, cost: 1, quantity: 1, minimumStock: 0 })
     check('duplicate SKU is a 409', duplicate.status === 409, `status ${duplicate.status}`)
 
-    const search = await call('GET', `/api/inventory?search=${encodeURIComponent('น้ำดื่ม SMOKE')}`)
-    check('case-insensitive search', search.status === 200 && search.json?.some((i) => i.sku === sku))
+    const search = await call('GET', `/api/inventory?page=1&sort=-createdAt&search=${encodeURIComponent('น้ำดื่ม SMOKE')}`)
+    check('case-insensitive search, newest first', search.status === 200 && search.json?.items?.[0]?.sku === sku, `status ${search.status}`)
+    const badSort = await call('GET', '/api/inventory?page=1&sort=nonsense')
+    check('an unknown sort field is a 400', badSort.status === 400, `status ${badSort.status}`)
 
     const byBarcode = await call('GET', `/api/inventory/barcode/${sku}`)
     check('barcode lookup', byBarcode.status === 200)
@@ -151,18 +158,25 @@ if (!credentials) {
     const second = await call('POST', '/api/customers', { firstName: 'สมชาย', lastName: 'ใจดี' })
     check('a second customer without email', second.status === 201, `status ${second.status}`)
 
+    // Priced as a VAT-registered shop with tax-inclusive prices, one point per 25 baht, and
+    // half a baht off per point used.
+    // The shop's own settings are put back at the end.
+    const priced = await call('PUT', '/api/shop-settings', { ...shop.json, shopName: shop.json?.shopName || 'Smoke test', vatMode: 'Inclusive', vatRatePercent: 7, bahtPerPoint: 25, pointValueBaht: 0.5 })
+    check('shop settings can be changed by a manager', priced.status === 200 && priced.json?.vatMode === 'Inclusive', `status ${priced.status}`)
+
     const sale = {
       customerId: customer.json?.id,
       paymentMethod: 'Cash',
-      discountAmount: 0,
+      discountAmount: 9,
       clientOrderId: crypto.randomUUID(),
-      items: [{ inventoryItemId: item.json?.id, quantity: 3, discount: 0 }],
+      items: [{ inventoryItemId: item.json?.id, quantity: 3, discount: 0.97 }],
     }
     const order = await call('POST', '/api/orders', sale)
     check(
-      'sale is recorded with rounded tax',
-      order.status === 201 && order.json?.taxAmount === 4.2 && order.json?.netAmount === 64.17 && order.json?.status === 'Completed',
-      `status ${order.status}, tax ${order.json?.taxAmount}, net ${order.json?.netAmount}`,
+      // 3 x 19.99 less 0.97 = 59.00, less 9 = 50.00 to pay; tax inside it 50 x 7/107 = 3.27; 2 points.
+      'sale: discounts come off before tax, tax is inside the price, points are earned',
+      order.status === 201 && order.json?.netAmount === 50 && order.json?.taxAmount === 3.27 && order.json?.pointsEarned === 2 && order.json?.status === 'Completed',
+      `status ${order.status}, net ${order.json?.netAmount}, tax ${order.json?.taxAmount}, points ${order.json?.pointsEarned}`,
     )
     const again = await call('POST', '/api/orders', sale)
     check('the same clientOrderId returns the same order', again.json?.id === order.json?.id)
@@ -183,14 +197,48 @@ if (!credentials) {
     await call('POST', `/api/customers/${customer.json?.id}/loyalty/earn`, { points: 50, description: 'ทดสอบ' })
     const redeem = await call('POST', `/api/customers/${customer.json?.id}/loyalty/redeem`, { points: 20, description: 'แลก' })
     const history = await call('GET', `/api/customers/${customer.json?.id}/loyalty`)
-    check('loyalty earn, redeem and history', redeem.json?.loyaltyPoints === 30 && history.json?.length === 2, `points ${redeem.json?.loyaltyPoints}`)
+    check('loyalty earn, redeem and history', redeem.json?.loyaltyPoints === 32 && history.json?.length === 3, `points ${redeem.json?.loyaltyPoints}`)
+    // 19.99 less 10 points at 0.50 = 14.99 to pay, with 14.99 x 7/107 = 0.98 of tax in it.
+    const withPoints = await call('POST', '/api/orders', { customerId: customer.json?.id, paymentMethod: 'Cash', pointsRedeemed: 10, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
+    const afterPoints = await call('GET', `/api/customers/${customer.json?.id}`)
+    check(
+      'points used on a bill come off before tax and leave the balance',
+      withPoints.status === 201 && withPoints.json?.pointsDiscount === 5 && withPoints.json?.netAmount === 14.99 && withPoints.json?.taxAmount === 0.98 && afterPoints.json?.loyaltyPoints === 22,
+      `status ${withPoints.status}, net ${withPoints.json?.netAmount}, tax ${withPoints.json?.taxAmount}, points ${afterPoints.json?.loyaltyPoints}`,
+    )
+    const tooManyPoints = await call('POST', '/api/orders', { customerId: customer.json?.id, paymentMethod: 'Cash', pointsRedeemed: 23, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
+    check('more points than the balance is a 409', tooManyPoints.status === 409, `status ${tooManyPoints.status}`)
+    const cancelPoints = await call('POST', `/api/orders/${withPoints.json?.id}/cancel`)
+    const pointsBack = await call('GET', `/api/customers/${customer.json?.id}`)
+    check('cancelling that bill gives the points back', cancelPoints.status === 200 && pointsBack.json?.loyaltyPoints === 32, `points ${pointsBack.json?.loyaltyPoints}`)
 
-    const orders = await call('GET', '/api/orders?status=Completed')
-    check('order list shows the customer name', orders.status === 200 && orders.json?.some((o) => o.customerName === 'มาลี'))
+    const tooMuchOff = await call('POST', '/api/orders', { paymentMethod: 'Cash', discountAmount: 1000, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
+    check('a discount larger than the bill is a 400', tooMuchOff.status === 400, `status ${tooMuchOff.status}`)
+
+    const orders = await call('GET', '/api/orders?status=Completed&page=1&pageSize=200')
+    check(
+      'order list shows the customer name and sums the completed sales',
+      orders.status === 200 && orders.json?.items?.some((o) => o.customerName === 'มาลี') && orders.json.completedCount === orders.json.total && orders.json.completedTotal > 0,
+      `status ${orders.status}`,
+    )
 
     const cancel = await call('POST', `/api/orders/${walkIn.json?.id}/cancel`)
     const afterCancel = await call('GET', `/api/inventory/${item.json?.id}`)
     check('cancelling returns the stock', cancel.status === 200 && afterCancel.json?.quantity === 3, `quantity ${afterCancel.json?.quantity}`)
+
+    const trail = await call('GET', `/api/audit-logs?entityType=Order&entityId=${walkIn.json?.id}`)
+    check(
+      'the cancellation is in the change history, with who did it',
+      trail.status === 200 && trail.json?.items?.[0]?.changes?.status?.new === 'Cancelled' && !!trail.json.items[0].userName,
+      `status ${trail.status}`,
+    )
+
+    const cancelEarned = await call('POST', `/api/orders/${order.json?.id}/cancel`)
+    const afterEarnedCancel = await call('GET', `/api/customers/${customer.json?.id}`)
+    check('cancelling a bill takes its points back', cancelEarned.status === 200 && afterEarnedCancel.json?.loyaltyPoints === 30, `points ${afterEarnedCancel.json?.loyaltyPoints}`)
+
+    const restored = await call('PUT', '/api/shop-settings', shop.json)
+    check('shop settings are put back', restored.status === 200 && restored.json?.vatMode === shop.json?.vatMode, `status ${restored.status}`)
 
     const remove = await call('DELETE', `/api/customers/${second.json?.id}`)
     check('delete customer', remove.status === 204, `status ${remove.status}`)

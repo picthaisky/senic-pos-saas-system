@@ -4,12 +4,13 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, Card, ErrorState, Input, PageSpinner } from '@/components/ui'
 import type { InventoryItem } from '@/features/inventory/types'
-import { formatCurrency, formatNumber } from '@/lib/format'
+import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format'
 import { useNetworkStore } from '@/stores/network'
 import { toast } from '@/stores/toast'
 import { useCartStore } from '../cart-store'
 import { CartPanel } from '../components/CartPanel'
 import { findByBarcode, searchProducts, syncCatalog } from '../offline/catalog'
+import { protectStorage } from '../offline/storage'
 
 export function PosPage() {
   const { t } = useTranslation()
@@ -26,6 +27,9 @@ export function PosPage() {
   useEffect(() => {
     if (online) void syncCatalog()
   }, [online])
+
+  // Before the first offline sale, not after: ask the browser to keep what the till stores.
+  useEffect(() => void protectStorage(), [])
 
   const results = useQuery({
     // `online` is part of the key so results are looked up again when the connection changes.
@@ -121,7 +125,16 @@ export function PosPage() {
                 {results.data.source === 'local' && (
                   <p className="mb-3 flex items-center gap-2 rounded-lg bg-warning/15 px-3 py-2 text-sm">
                     <CloudOff className="size-4 shrink-0 text-warning" aria-hidden="true" />
-                    {t('offline.localResults')}
+                    <span className="flex flex-col">
+                      <span>{t('offline.localResults')}</span>
+                      <span className="text-muted">
+                        {results.data.syncedAt
+                          ? t('offline.catalogSyncedAt', {
+                              time: formatDateTime(results.data.syncedAt),
+                            })
+                          : t('offline.catalogNeverSynced')}
+                      </span>
+                    </span>
                   </p>
                 )}
                 {results.data.result.length === 0 ? (

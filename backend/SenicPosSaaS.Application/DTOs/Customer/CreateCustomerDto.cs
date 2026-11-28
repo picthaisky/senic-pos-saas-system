@@ -15,7 +15,7 @@ public class CreateCustomerDto
     [StringLength(100)]
     public string LastName { get; set; } = string.Empty;
 
-    [EmailAddress, StringLength(200)]
+    [OptionalEmail, StringLength(200)]
     public string? Email { get; set; }
 
     [StringLength(20)]
@@ -36,7 +36,7 @@ public class UpdateCustomerDto
     [StringLength(100)]
     public string? LastName { get; set; }
 
-    [EmailAddress, StringLength(200)]
+    [OptionalEmail, StringLength(200)]
     public string? Email { get; set; }
 
     [StringLength(20)]

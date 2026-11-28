@@ -31,17 +31,67 @@ public class ApplicationDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ShopSettings> ShopSettings => Set<ShopSettings>();
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         StampTenant();
-        return base.SaveChangesAsync(cancellationToken);
+        var audit = AddAuditEntries();
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            RemoveAuditEntries(audit);
+            throw;
+        }
     }
 
     public override int SaveChanges()
     {
         StampTenant();
-        return base.SaveChanges();
+        var audit = AddAuditEntries();
+        try
+        {
+            return base.SaveChanges();
+        }
+        catch
+        {
+            RemoveAuditEntries(audit);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Records who is making the pending changes: on the rows themselves (CreatedBy, UpdatedBy)
+    /// and, for the changes listed in <see cref="AuditTrail"/>, as audit entries saved in the
+    /// same transaction. Nothing is recorded when nobody is signed in (seeding, sign-in,
+    /// background jobs).
+    /// </summary>
+    private List<AuditLog> AddAuditEntries()
+    {
+        if (_currentUser?.UserId is not { } userId || CurrentTenantId is not { } tenantId)
+            return [];
+
+        var author = userId.ToString();
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Added) entry.Entity.CreatedBy ??= author;
+            else if (entry.State == EntityState.Modified) entry.Entity.UpdatedBy = author;
+        }
+
+        var audit = AuditTrail.Collect(ChangeTracker, userId, tenantId);
+        AuditLogs.AddRange(audit);
+        return audit;
+    }
+
+    /// <summary>After a failed save, so that a retry does not record the same change twice.</summary>
+    private void RemoveAuditEntries(List<AuditLog> audit)
+    {
+        foreach (var log in audit)
+            Entry(log).State = EntityState.Detached;
     }
 
     /// <summary>
@@ -74,6 +124,8 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<User>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<PushSubscription>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<AuditLog>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<ShopSettings>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         // OrderItem has no TenantId of its own; it follows its order.
         modelBuilder.Entity<OrderItem>().HasQueryFilter(e => CurrentTenantId == null || e.Order!.TenantId == CurrentTenantId);
 
@@ -90,6 +142,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
+            entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
+            entity.Property(e => e.PointsDiscount).HasPrecision(18, 2);
 
             entity.HasOne(e => e.Customer)
                 .WithMany(c => c.Orders)
@@ -203,6 +257,36 @@ public class ApplicationDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // One row of settings per shop
+        modelBuilder.Entity<ShopSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TenantId).IsUnique();
+            entity.Property(e => e.ShopName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Address).HasMaxLength(500);
+            entity.Property(e => e.Phone).HasMaxLength(20);
+            entity.Property(e => e.TaxId).HasMaxLength(13);
+            entity.Property(e => e.Branch).HasMaxLength(100);
+            entity.Property(e => e.ReceiptFooter).HasMaxLength(500);
+            entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
+            entity.Property(e => e.BahtPerPoint).HasPrecision(18, 2);
+            entity.Property(e => e.PointValueBaht).HasPrecision(18, 2);
+        });
+
+        // Configure AuditLog entity
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+            entity.HasIndex(e => new { e.TenantId, e.EntityType, e.EntityId });
+            // Stored as text so the table can be read without knowing the enum's numbers.
+            entity.Property(e => e.Action).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.EntityLabel).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Changes).IsRequired();
+            // No foreign key to the user or the record: the history must outlive both.
         });
 
         // Configure LoyaltyTransaction entity

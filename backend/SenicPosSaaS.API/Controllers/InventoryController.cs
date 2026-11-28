@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.Application.DTOs;
 using SenicPosSaaS.Application.DTOs.InventoryItem;
 using SenicPosSaaS.Application.Interfaces;
+using SenicPosSaaS.Domain.Common;
 
 namespace SenicPosSaaS.API.Controllers;
 
@@ -19,19 +21,41 @@ public class InventoryController : TenantControllerBase
     }
 
     /// <summary>
-    /// Items of the signed-in user's tenant. Every filter is optional.
+    /// Items of the signed-in user's tenant. Every filter is optional. With <paramref name="page"/>
+    /// the answer is one page (<see cref="PageDto{T}"/>); without it, the whole list as an array,
+    /// which is kept for clients written before paging and will be removed.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<InventoryItemDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> GetItems(
+    [ProducesResponseType(typeof(PageDto<InventoryItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetItems(
         [FromQuery] string? search,
         [FromQuery] string? category,
         [FromQuery] bool? isActive,
         [FromQuery] bool lowStock = false,
+        [FromQuery] int? page = null,
+        [FromQuery] int pageSize = PageRequest.DefaultPageSize,
+        [FromQuery] string? sort = null,
         CancellationToken cancellationToken = default)
     {
-        var items = await _inventoryService.SearchInventoryItemsAsync(TenantId, search, category, isActive, lowStock, cancellationToken);
-        return Ok(items);
+        if (page == null)
+            return Ok(await _inventoryService.SearchInventoryItemsAsync(TenantId, search, category, isActive, lowStock, cancellationToken));
+
+        if (!SortSpec.TryParse(sort, SortFields.Inventory, out var order))
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["sort"] = [$"Unknown sort field. Use one of: {string.Join(", ", SortFields.Inventory)}; prefix with '-' for descending."]
+            }));
+
+        return Ok(await _inventoryService.SearchInventoryItemsPageAsync(TenantId, search, category, isActive, lowStock, order, page.Value, pageSize, cancellationToken));
+    }
+
+    /// <summary>The categories in use, for filters and suggestions.</summary>
+    [HttpGet("categories")]
+    [ProducesResponseType(typeof(IEnumerable<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<string>>> GetCategories(CancellationToken cancellationToken)
+    {
+        return Ok(await _inventoryService.GetCategoriesAsync(TenantId, cancellationToken));
     }
 
     [HttpGet("{id:guid}")]

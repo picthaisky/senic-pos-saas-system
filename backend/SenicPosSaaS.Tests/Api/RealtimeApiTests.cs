@@ -97,7 +97,7 @@ public class RealtimeApiTests : IClassFixture<ApiFactory>
         // 12 -> 11: still above the reorder point of 10.
         await cashier.PostAsJsonAsync("/api/orders", Sale(item.Id, 1));
         var first = await NextAsync(owner.Orders);
-        first.NetAmount.Should().Be(53.5m);
+        first.NetAmount.Should().Be(50m);
         first.OrderNumber.Should().StartWith("ORD-");
 
         // 11 -> 9: crosses it.

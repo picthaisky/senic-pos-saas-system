@@ -111,4 +111,34 @@ public class ConcurrencyPostgresTests : IClassFixture<PostgresApiFactory>
         after!.LoyaltyPoints.Should().Be(100 - 30 * succeeded, "the balance must match the redemptions that were accepted");
         after.LoyaltyPoints.Should().BeGreaterThanOrEqualTo(0);
     }
+
+    [Fact]
+    public async Task SimultaneousBillsPaidWithPoints_NeverSpendMorePointsThanTheCustomerHas()
+    {
+        var owner = await _factory.SignInAsync("owner@a.test");
+        (await owner.PutAsJsonAsync("/api/shop-settings", new { shopName = "Race", vatMode = "None", vatRatePercent = 7, pointValueBaht = 1 })).EnsureSuccessStatusCode();
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Bought with points", 50, 100);
+        var created = await owner.PostAsJsonAsync("/api/customers", new { firstName = "Bill", lastName = "Race" });
+        var customer = (await created.Content.ReadFromJsonAsync<Application.DTOs.Customer.CustomerDto>(ApiFactory.Json))!;
+        await owner.PostAsJsonAsync($"/api/customers/{customer.Id}/loyalty/earn", new { points = 100, description = "start" });
+
+        // Eight tills each sell one item with 30 of the 100 points: only three can succeed.
+        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            owner.PostAsJsonAsync("/api/orders", new
+            {
+                customerId = customer.Id,
+                paymentMethod = "Cash",
+                pointsRedeemed = 30,
+                items = new[] { new { inventoryItemId = item.Id, quantity = 1 } }
+            })));
+
+        var succeeded = responses.Count(r => r.IsSuccessStatusCode);
+        responses.Should().OnlyContain(r => r.IsSuccessStatusCode || r.StatusCode == HttpStatusCode.Conflict);
+        succeeded.Should().BeInRange(1, 3);
+
+        var after = await owner.GetFromJsonAsync<Application.DTOs.Customer.CustomerDto>($"/api/customers/{customer.Id}", ApiFactory.Json);
+        after!.LoyaltyPoints.Should().Be(100 - 30 * succeeded, "the balance must match the bills that were accepted");
+        // A refused bill sells nothing.
+        (await _factory.StockOfAsync(item.Id)).Should().Be(100 - succeeded);
+    }
 }

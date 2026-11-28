@@ -1,4 +1,6 @@
+using SenicPosSaaS.Application.DTOs;
 using SenicPosSaaS.Application.DTOs.Customer;
+using SenicPosSaaS.Domain.Common;
 
 namespace SenicPosSaaS.Application.Interfaces;
 
@@ -8,6 +10,8 @@ public interface ICustomerService
     Task<CustomerDto?> GetCustomerByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IEnumerable<CustomerDto>> GetCustomersByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task<IEnumerable<CustomerDto>> SearchCustomersAsync(Guid tenantId, string? search, CancellationToken cancellationToken = default);
+    /// <summary>One page of the search; page and page size are brought into range.</summary>
+    Task<PageDto<CustomerDto>> SearchCustomersPageAsync(Guid tenantId, string? search, SortSpec? sort, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<CustomerDto?> UpdateCustomerAsync(Guid id, UpdateCustomerDto dto, CancellationToken cancellationToken = default);
 
     /// <summary>Deactivates the customer; their orders and points history are kept.</summary>

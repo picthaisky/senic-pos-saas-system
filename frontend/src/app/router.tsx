@@ -13,6 +13,8 @@ const pages: Record<string, () => Promise<{ Component: ComponentType }>> = {
       Component: m.DashboardPage,
     })),
   '/pos': () => import('@/features/pos/pages/PosPage').then((m) => ({ Component: m.PosPage })),
+  '/orders': () =>
+    import('@/features/orders/pages/OrdersPage').then((m) => ({ Component: m.OrdersPage })),
   '/inventory': () =>
     import('@/features/inventory/pages/InventoryPage').then((m) => ({
       Component: m.InventoryPage,
@@ -23,6 +25,16 @@ const pages: Record<string, () => Promise<{ Component: ComponentType }>> = {
     })),
   '/users': () =>
     import('@/features/users/pages/UsersPage').then((m) => ({ Component: m.UsersPage })),
+  '/audit': () =>
+    import('@/features/audit/pages/AuditPage').then((m) => ({ Component: m.AuditPage })),
+  '/settings': () =>
+    import('@/features/shop/pages/ShopSettingsPage').then((m) => ({
+      Component: m.ShopSettingsPage,
+    })),
+  '/subscription': () =>
+    import('@/features/subscription/pages/SubscriptionPage').then((m) => ({
+      Component: m.SubscriptionPage,
+    })),
 }
 
 // Exported as plain route objects so tests can mount them in a memory router.

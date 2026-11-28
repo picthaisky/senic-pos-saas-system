@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { toIsoDate } from '@/lib/format'
 
 // Shapes from docs/API_REFERENCE.md §6.
 
@@ -27,9 +28,6 @@ export interface DashboardSummary {
 }
 
 export const DASHBOARD_KEY = ['dashboard'] as const
-
-const toIsoDate = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 /** Summary for the last `days` days, today included. */
 export function useDashboardSummary(days: number) {

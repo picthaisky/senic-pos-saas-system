@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 // The main journeys of the app in a real browser, against a real backend and database.
 // Texts are the Thai UI strings (the default language).
@@ -94,6 +95,18 @@ test('stays signed in after a reload and signs out', async ({ page }) => {
 
 test('adds an item, sells it at the till and sees the stock go down', async ({ page }) => {
   await signIn(page)
+
+  // The shop says it is registered for VAT, with the tax already in its prices. Every later
+  // test in this file sells in this shop.
+  await page.getByRole('link', { name: 'ตั้งค่าร้าน' }).click()
+  await page.getByLabel('ชื่อร้าน').fill('ร้านทดสอบ E2E')
+  await page.getByLabel('ร้านกับ VAT').selectOption('Inclusive')
+  await page.getByLabel('ยอดซื้อกี่บาทต่อ 1 แต้ม').fill('25')
+  await page.getByLabel('1 แต้มใช้เป็นส่วนลดได้กี่บาท').fill('0.5')
+  await shot(page, '02b-settings')
+  await page.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกการตั้งค่าแล้ว')).toBeVisible()
+
   const item = await addItem(page, { price: '50', quantity: '10' })
   await shot(page, '03-inventory')
 
@@ -102,16 +115,39 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   const cart = page.getByRole('region', { name: 'ตะกร้า' })
   await expect(cart.getByText(item.name)).toBeVisible()
   await cart.getByRole('button', { name: `เพิ่มจำนวน ${item.name}` }).click()
-  // 2 x 50 + 7% tax
-  await expect(cart.getByText('฿107.00')).toBeVisible()
-  await expect(cart.getByText('ภาษี (7%)')).toBeVisible()
+  // 2 x 50 less a discount of 7 on the line = 93.00 to pay, with 93 x 7/107 = 6.08 of tax in it.
+  await cart.getByLabel(`ส่วนลดของ ${item.name} (บาท)`).fill('7')
+  await expect(cart.getByText('฿93.00').first()).toBeVisible()
+  await expect(cart.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
+  await expect(cart.getByText('฿6.08')).toBeVisible()
   await shot(page, '04-pos')
 
   await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
   const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
   await expect(receipt.getByText(/^ORD-\d{8}-[0-9A-F]{8}$/)).toBeVisible()
-  await expect(receipt.getByText('฿107.00')).toBeVisible()
+  await expect(receipt.getByText('฿93.00')).toBeVisible()
+  await expect(receipt.getByText('฿6.08')).toBeVisible()
   await shot(page, '05-receipt')
+
+  // Printing: the browser's print dialog is replaced by a recorder. On paper only the receipt
+  // is there; the screen behind it is not.
+  await page.evaluate(() => {
+    window.print = () => document.documentElement.setAttribute('data-printed', 'yes')
+  })
+  await receipt.getByRole('button', { name: 'พิมพ์ใบเสร็จ' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-printed', 'yes')
+  await page.emulateMedia({ media: 'print' })
+  const paper = page.locator('.receipt-print')
+  await expect(paper.getByRole('heading', { name: 'ใบเสร็จรับเงิน' })).toBeVisible()
+  await expect(paper.getByText('ร้านทดสอบ E2E')).toBeVisible()
+  await expect(paper.getByRole('rowheader', { name: new RegExp(item.name) })).toBeVisible()
+  await expect(paper.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
+  await expect(paper.getByText('เอกสารนี้ไม่ใช่ใบกำกับภาษี')).toBeVisible()
+  await expect(cart).toBeHidden()
+  await shot(page, '05b-receipt-print')
+  await page.emulateMedia({ media: 'screen' })
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+  await expect(paper).toHaveCount(0)
   await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
 
   await page.getByRole('link', { name: 'สินค้าคงคลัง' }).click()
@@ -132,6 +168,8 @@ test('keeps selling while offline and sends the sale when the connection returns
   await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
   await expect(page.getByRole('region', { name: 'ตะกร้า' })).toBeVisible()
   await page.waitForTimeout(1500)
+  // The app itself must be installed too, or it could not be reopened without a connection.
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined))
 
   await context.setOffline(true)
   await expect(page.getByText('ออฟไลน์', { exact: true })).toBeVisible()
@@ -144,7 +182,31 @@ test('keeps selling while offline and sends the sale when the connection returns
   await expect(saved).toBeVisible()
   await shot(page, '06-offline-sale')
   await saved.getByRole('button', { name: 'ขายรายการใหม่' }).click()
-  await expect(page.getByRole('button', { name: 'รายการขายที่รอส่ง 1 รายการ' })).toBeVisible()
+  const queueButton = page.getByRole('button', { name: 'รายการขายที่รอส่ง 1 รายการ' })
+  await expect(queueButton).toBeVisible()
+
+  // The unsent sale can be taken out of the browser as a file ...
+  await queueButton.click()
+  const queue = page.getByRole('dialog', { name: 'รายการขายที่รอส่ง' })
+  const download = page.waitForEvent('download')
+  await queue.getByRole('button', { name: 'ส่งออกเป็นไฟล์' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^offline-sales-.*.csv$/)
+  expect(readFileSync(await file.path(), 'utf8')).toContain(item.name)
+  await shot(page, '06b-offline-queue')
+  await page.keyboard.press('Escape')
+
+  // ... signing out asks first ...
+  await page.getByRole('button', { name: 'ออกจากระบบ' }).click()
+  const warning = page.getByRole('dialog', { name: 'ยังมีรายการขายที่ไม่ได้ส่ง' })
+  await expect(warning.getByText(/1 รายการที่ยังไม่ถึงเซิร์ฟเวอร์/)).toBeVisible()
+  await shot(page, '06c-sign-out-warning')
+  await warning.getByRole('button', { name: 'ยกเลิก' }).click()
+
+  // ... and it is still there after the page is closed and opened again without a connection.
+  await page.reload()
+  await expect(page.getByText('ออฟไลน์', { exact: true })).toBeVisible()
+  await expect(queueButton).toBeVisible()
 
   await context.setOffline(false)
   await expect(page.getByText('ส่งรายการขายที่ค้างแล้ว 1 รายการ')).toBeVisible({ timeout: 20_000 })
@@ -156,6 +218,128 @@ test('keeps selling while offline and sends the sale when the connection returns
   await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
   const row = page.getByRole('row', { name: new RegExp(item.name) })
   await expect(row.getByRole('cell', { name: '9', exact: true })).toBeVisible()
+})
+
+test('finds a sale in the sales history, cancels it and gets the stock back', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '30', quantity: '5' })
+
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  await scan(page, item.barcode)
+  const cart = page.getByRole('region', { name: 'ตะกร้า' })
+  await expect(cart.getByText(item.name)).toBeVisible()
+  await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
+  const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
+  const number = (await receipt.getByText(/^ORD-/).textContent())!
+  await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
+
+  await page.getByRole('link', { name: 'ประวัติการขาย' }).click()
+  const row = page.getByRole('row', { name: new RegExp(number) })
+  // The price already includes the tax.
+  await expect(row.getByText('฿30.00')).toBeVisible()
+  await shot(page, '12-orders')
+
+  await row.getByRole('button', { name: `ดูรายละเอียด ${number}` }).click()
+  const detail = page.getByRole('dialog', { name: number })
+  await expect(detail.getByRole('rowheader', { name: item.name })).toBeVisible()
+  await shot(page, '13-order-detail')
+
+  await detail.getByRole('button', { name: 'ยกเลิกบิล' }).click()
+  const confirm = page.getByRole('dialog', { name: 'ยกเลิกบิล', exact: true })
+  await expect(confirm.getByText(/สินค้าในบิลจะถูกคืนเข้าสต็อก/)).toBeVisible()
+  await confirm.getByRole('button', { name: 'ยกเลิกบิล' }).click()
+  await expect(page.getByText(`ยกเลิกบิล ${number} แล้ว`)).toBeVisible()
+  // The open bill shows its new status and can no longer be cancelled.
+  await expect(detail.getByText('ยกเลิกแล้ว')).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'ยกเลิกบิล' })).toBeHidden()
+  await detail.getByRole('button', { name: 'ปิด', exact: true }).last().click()
+
+  // Sold one of five, cancelled: five again.
+  await page.getByRole('link', { name: 'สินค้าคงคลัง' }).click()
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
+  const stock = page.getByRole('row', { name: new RegExp(item.name) })
+  await expect(stock.getByRole('cell', { name: '5', exact: true })).toBeVisible()
+})
+
+test('adds a customer, corrects their details, and opens the subscription page', async ({
+  page,
+}) => {
+  await signIn(page)
+  const id = `${Date.now()}`.slice(-8)
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByLabel('ชื่อ', { exact: true }).fill(`ลูกค้า${id}`)
+  await page.getByLabel('นามสกุล').fill('ทดสอบ')
+  await page.getByRole('button', { name: 'เพิ่มลูกค้า' }).click()
+  await expect(page.getByText('เพิ่มลูกค้าแล้ว')).toBeVisible()
+
+  await page.getByRole('button', { name: `แก้ไข ลูกค้า${id} ทดสอบ` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขลูกค้า' })
+  await dialog.getByLabel('นามสกุล').fill('แก้แล้ว')
+  await dialog.getByLabel('เบอร์โทร').fill('0811112222')
+  await dialog.getByLabel('ที่อยู่').fill('99 ถนนทดสอบ')
+  await shot(page, '14-customer-edit')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกลูกค้าแล้ว')).toBeVisible()
+
+  const row = page.getByRole('row', { name: new RegExp(`ลูกค้า${id} แก้แล้ว`) })
+  await expect(row.getByText('0811112222')).toBeVisible()
+  // The server kept it: still there after a reload, address included.
+  await page.reload()
+  await page.getByRole('button', { name: `ดูรายละเอียด ลูกค้า${id} แก้แล้ว` }).click()
+  await expect(page.getByText('99 ถนนทดสอบ')).toBeVisible()
+
+  // A stack started from scratch has no subscription on record; the page says so plainly.
+  await page.getByRole('link', { name: 'แพ็กเกจของร้าน' }).click()
+  await expect(page.getByRole('heading', { name: 'แพ็กเกจของร้าน' })).toBeVisible()
+  await expect(page.getByText(/ยังไม่มีข้อมูลแพ็กเกจ/)).toBeVisible()
+  await shot(page, '15-subscription')
+})
+
+test('uses the points of a customer as a discount at the till', async ({ page }) => {
+  await signIn(page)
+  const id = `${Date.now()}`.slice(-8)
+  const customer = `แต้ม${id} ทดสอบ`
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByLabel('ชื่อ', { exact: true }).fill(`แต้ม${id}`)
+  await page.getByLabel('นามสกุล').fill('ทดสอบ')
+  await page.getByRole('button', { name: 'เพิ่มลูกค้า' }).click()
+  await expect(page.getByText('เพิ่มลูกค้าแล้ว')).toBeVisible()
+  await page.getByRole('button', { name: `ดูรายละเอียด ${customer}` }).click()
+  await page.getByRole('button', { name: 'เพิ่มแต้ม' }).click()
+  const give = page.getByRole('dialog', { name: 'เพิ่มแต้ม' })
+  await give.getByLabel('แต้มสะสม').fill('40')
+  await give.getByRole('button', { name: 'เพิ่มแต้ม' }).click()
+  await expect(page.getByText('เพิ่มแต้มแล้ว')).toBeVisible()
+
+  const item = await addItem(page, { price: '50', quantity: '5' })
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  await scan(page, item.barcode)
+  const cart = page.getByRole('region', { name: 'ตะกร้า' })
+  await expect(cart.getByText(item.name)).toBeVisible()
+  await cart.getByLabel('ลูกค้า').selectOption({ label: customer })
+
+  // The shop gives half a baht per point: 20 points take 10 off, 40.00 is paid, and the tax
+  // inside it is 40 x 7/107 = 2.62.
+  await cart.getByLabel('ใช้แต้มเป็นส่วนลด').fill('20')
+  await expect(cart.getByText('ส่วนลดจากแต้ม (20 แต้ม)')).toBeVisible()
+  await expect(cart.getByText('-฿10.00')).toBeVisible()
+  await expect(cart.getByText('฿40.00').first()).toBeVisible()
+  await expect(cart.getByText('฿2.62')).toBeVisible()
+  await shot(page, '15b-pos-points')
+
+  await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
+  const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
+  await expect(receipt.getByText('฿40.00')).toBeVisible()
+  await expect(receipt.getByText('-฿10.00')).toBeVisible()
+  await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
+
+  // 40 - 20 used + 1 earned on the 40 baht paid.
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByRole('button', { name: `ดูรายละเอียด ${customer}` }).click()
+  const history = page.getByRole('region', { name: 'ประวัติแต้ม' })
+  await expect(history.getByText(/ใช้เป็นส่วนลด ORD-/)).toBeVisible()
+  await expect(history.getByText(/จากการขาย ORD-/)).toBeVisible()
+  await expect(page.getByRole('row', { name: new RegExp(customer) }).getByText('21')).toBeVisible()
 })
 
 test('updates another open window when a sale happens', async ({ page, context }) => {
@@ -258,6 +442,26 @@ test('adds a cashier who signs in, changes their password, and is later deactiva
   await signInAsStaff(ownPassword)
   await expect(till.getByText('รหัสร้าน อีเมล หรือรหัสผ่านไม่ถูกต้อง')).toBeVisible()
   await device.close()
+})
+
+test('shows a stock correction in the change history', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '15', quantity: '4' })
+  await page.getByRole('button', { name: `แก้ไข ${item.name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขสินค้า' })
+  await dialog.getByLabel('คงเหลือ').fill('9')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.getByRole('link', { name: 'ประวัติการแก้ไข' }).click()
+  // Newest first: the correction, then the creation of the item.
+  const rows = page.getByRole('row', { name: new RegExp(item.name) })
+  await expect(rows).toHaveCount(2)
+  await expect(rows.first().getByRole('listitem').filter({ hasText: 'คงเหลือ' })).toHaveText(
+    /คงเหลือ\s*4\s*9/,
+  )
+  await expect(rows.last().getByText('เพิ่ม', { exact: true })).toBeVisible()
+  await shot(page, '11-audit')
 })
 
 test('works in English, in dark mode and on a phone-sized screen', async ({ page }) => {

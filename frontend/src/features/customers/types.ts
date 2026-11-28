@@ -21,10 +21,19 @@ export interface CreateCustomer {
   phone: string | null
 }
 
+/** PUT /customers/{id}: a field left out stays as it is; an empty string clears it. */
+export type UpdateCustomer = Partial<
+  Record<'firstName' | 'lastName' | 'email' | 'phone' | 'address', string>
+>
+
 export interface LoyaltyTransaction {
   id: string
   customerId: string
-  type: 'Earned' | 'Redeemed'
+  /**
+   * 'Reversed' = points taken back because the bill that earned them was cancelled;
+   * 'Returned' = points given back because the bill they were used on was cancelled.
+   */
+  type: 'Earned' | 'Redeemed' | 'Reversed' | 'Returned'
   points: number
   orderId: string | null
   description: string

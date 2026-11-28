@@ -1,5 +1,7 @@
 // Shapes from docs/API_REFERENCE.md §5.
 
+import type { VatMode } from '@/features/shop/pricing'
+
 export const PAYMENT_METHODS = [
   'Cash',
   'CreditCard',
@@ -16,6 +18,8 @@ export interface CreateOrder {
   customerId: string | null
   paymentMethod: PaymentMethod
   discountAmount: number
+  /** Points of the customer used as a discount. Absent on sales queued by an older version. */
+  pointsRedeemed?: number
   notes: string | null
   /** Generated per cart so a retried or re-synced order is not created twice. */
   clientOrderId: string
@@ -41,6 +45,14 @@ export interface Order {
   discountAmount: number
   taxAmount: number
   netAmount: number
+  /** How the shop's prices related to VAT when the bill was made. */
+  vatMode: VatMode
+  vatRatePercent: number
+  /** Points this bill gave its customer. */
+  pointsEarned: number
+  /** Points the customer used on this bill, and the baht they took off. */
+  pointsRedeemed: number
+  pointsDiscount: number
   status: OrderStatus
   paymentMethod: PaymentMethod
   createdAt: string

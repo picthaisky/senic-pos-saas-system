@@ -25,6 +25,7 @@ public class ApiExceptionHandler : IExceptionHandler
         var (status, title, detail) = exception switch
         {
             ConflictException => (StatusCodes.Status409Conflict, "Conflict", exception.Message),
+            InvalidRequestException => (StatusCodes.Status400BadRequest, "Bad Request", exception.Message),
             NotFoundException => (StatusCodes.Status404NotFound, "Not Found", exception.Message),
             ConcurrencyException => (StatusCodes.Status409Conflict, "Conflict", "The data was changed by someone else. Reload and try again."),
             DuplicateKeyException => (StatusCodes.Status409Conflict, "Conflict", "A record with the same unique value already exists."),

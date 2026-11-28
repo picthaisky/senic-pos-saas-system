@@ -1,10 +1,22 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { inventoryApi } from '@/features/inventory/api'
+import { DEFAULT_SHOP_SETTINGS } from '@/features/shop/api'
 import i18n from '@/i18n'
+import { downloadCsv, toCsv } from '@/lib/export-csv'
+import { formatDateTime } from '@/lib/format'
+import { mockShopSettings } from '@/mocks/mock-data'
+import { useAuthStore } from '@/stores/auth'
 import { renderApp, signIn } from '@/test/render-app'
 import { useCartStore } from '../cart-store'
 import { offlineDb, type QueuedOrder } from './db'
 import { discardOrder, loadQueue, retryOrder, syncQueue, useOrderQueue } from './queue'
+import { useStorageProtection } from './storage'
+
+// The export is checked by what would be written to the file; jsdom cannot save one.
+vi.mock('@/lib/export-csv', async (original) => ({
+  ...(await original<typeof import('@/lib/export-csv')>()),
+  downloadCsv: vi.fn(),
+}))
 
 // Runs against the in-memory mock API, which refuses requests while navigator.onLine is false,
 // like a real server would be unreachable. Seed data: "กาแฟกระป๋อง" costs ฿18, 48 in stock.
@@ -26,8 +38,16 @@ async function searchFor(text: string) {
 beforeEach(() => useCartStore.getState().clear())
 
 afterEach(async () => {
+  // Unmount first: a screen that is still up would start sending the queue once the network
+  // is back, and write to it while it is being emptied below.
+  cleanup()
   setOnline(true)
+  await vi.waitFor(() => expect(useOrderQueue.getState().syncing).toBe(false))
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS }
+  vi.mocked(downloadCsv).mockClear()
+  useStorageProtection.setState({ protection: 'unknown' })
   for (const order of await offlineDb.listOrders(TENANT)) {
     await offlineDb.deleteOrder(order.clientOrderId)
   }
@@ -36,6 +56,8 @@ afterEach(async () => {
 
 describe('selling while offline', () => {
   it('uses the local catalog, queues the sale, and sends it exactly once when back online', async () => {
+    // The till read the shop's VAT settings while it was online, and prices with them offline.
+    mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, vatMode: 'Exclusive' }
     renderApp('/pos', 'Cashier')
     await screen.findByLabelText(t('pos.searchProducts'))
     // Opening the POS downloads the catalog for offline use.
@@ -46,6 +68,11 @@ describe('selling while offline', () => {
 
     await searchFor('กาแฟ')
     expect(await screen.findByText(t('offline.localResults'))).toBeInTheDocument()
+    // ... and says how old that copy is.
+    const { syncedAt } = (await offlineDb.getCatalog(TENANT))!
+    expect(
+      screen.getByText(t('offline.catalogSyncedAt', { time: formatDateTime(syncedAt) })),
+    ).toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: /กาแฟกระป๋อง/ }))
 
     const cart = within(screen.getByRole('region', { name: t('pos.cart') }))
@@ -149,5 +176,138 @@ describe('order queue', () => {
     expect(await offlineDb.listOrders('another-tenant')).toHaveLength(1)
 
     await offlineDb.deleteOrder(queued.clientOrderId)
+  })
+})
+
+describe('not losing queued sales', () => {
+  const HOUR = 3_600_000
+
+  /** Puts sales in the queue of the test tenant; the screen is rendered offline afterwards. */
+  async function seedQueue(...ages: number[]) {
+    setOnline(false)
+    for (const age of ages) {
+      const clientOrderId = crypto.randomUUID()
+      await offlineDb.putOrder({
+        clientOrderId,
+        tenantId: TENANT,
+        request: {
+          customerId: null,
+          paymentMethod: 'Cash',
+          discountAmount: 0,
+          notes: null,
+          clientOrderId,
+          items: [{ inventoryItemId: 'i1', quantity: 2, discount: 0 }],
+        },
+        summary: { lines: [{ name: 'กาแฟกระป๋อง', quantity: 2, unitPrice: 18 }], total: 38.52 },
+        createdAt: new Date(Date.now() - age).toISOString(),
+        status: 'pending',
+      })
+    }
+  }
+
+  function stubStorage(persistent: boolean) {
+    const persist = vi.fn().mockResolvedValue(persistent)
+    const persisted = vi.fn().mockResolvedValue(false)
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: { persist, persisted },
+    })
+    return persist
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'storage')
+  })
+
+  async function openQueue(count: number) {
+    fireEvent.click(
+      await screen.findByRole('button', { name: t('offline.queueButton', { count }) }),
+    )
+    return within(await screen.findByRole('dialog', { name: t('offline.queueTitle') }))
+  }
+
+  it('asks the browser to keep the data, and warns when it will not promise to', async () => {
+    const persist = stubStorage(false)
+    await seedQueue(HOUR)
+    renderApp('/pos', 'Cashier')
+
+    const queue = await openQueue(1)
+
+    expect(await queue.findByText(t('offline.notProtected'))).toBeInTheDocument()
+    expect(persist).toHaveBeenCalled()
+    // One hour old: not overdue.
+    expect(queue.queryByText(t('offline.staleWarning', { hours: 24 }))).not.toBeInTheDocument()
+  })
+
+  it('shows no storage warning once the browser has agreed', async () => {
+    stubStorage(true)
+    await seedQueue(HOUR)
+    renderApp('/pos', 'Cashier')
+
+    const queue = await openQueue(1)
+
+    await vi.waitFor(() => expect(useStorageProtection.getState().protection).toBe('persistent'))
+    expect(queue.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('calls out sales that have waited more than a day', async () => {
+    await seedQueue(30 * HOUR, HOUR)
+    renderApp('/pos', 'Cashier')
+
+    expect(await screen.findByText(t('offline.staleToast', { count: 1 }))).toBeInTheDocument()
+    const queue = await openQueue(2)
+    expect(queue.getByText(t('offline.staleWarning', { hours: 24 }))).toBeInTheDocument()
+  })
+
+  it('exports the queue as a spreadsheet file, one row per line sold', async () => {
+    await seedQueue(HOUR)
+    renderApp('/pos', 'Cashier')
+
+    const queue = await openQueue(1)
+    fireEvent.click(queue.getByRole('button', { name: t('offline.exportFile') }))
+
+    expect(downloadCsv).toHaveBeenCalledOnce()
+    const [filename, rows, columns] = vi.mocked(downloadCsv).mock.calls[0]
+    expect(filename).toMatch(/^offline-sales-\d{4}-\d{2}-\d{2}\.csv$/)
+    const [header, line] = toCsv(rows, columns).trim().split('\r\n')
+    expect(header).toContain(t('offline.export.item'))
+    expect(line).toContain('กาแฟกระป๋อง,2,18,38.52,' + t('payment.Cash'))
+    expect(line).toContain(t('offline.pending'))
+  })
+
+  it('warns before signing out while sales are waiting, and keeps them either way', async () => {
+    await seedQueue(HOUR, HOUR)
+    renderApp('/pos', 'Cashier')
+    await screen.findByRole('button', { name: t('offline.queueButton', { count: 2 }) })
+    // The first of that name is the one in the top bar; the warning has its own.
+    const signOut = () =>
+      fireEvent.click(screen.getAllByRole('button', { name: t('topbar.logout') })[0])
+
+    signOut()
+    const warning = within(await screen.findByRole('dialog', { name: t('offline.logoutTitle') }))
+    expect(warning.getByText(t('offline.logoutWarning', { count: 2 }))).toBeInTheDocument()
+
+    // Cancel: still signed in.
+    fireEvent.click(warning.getByRole('button', { name: t('common.cancel') }))
+    expect(useAuthStore.getState().status).toBe('authenticated')
+
+    // The file can be taken from here too, then sign out for real.
+    signOut()
+    fireEvent.click(warning.getByRole('button', { name: t('offline.exportFile') }))
+    expect(downloadCsv).toHaveBeenCalledOnce()
+    fireEvent.click(warning.getByRole('button', { name: t('topbar.logout') }))
+
+    await vi.waitFor(() => expect(useAuthStore.getState().status).toBe('anonymous'))
+    expect(await offlineDb.listOrders(TENANT)).toHaveLength(2)
+  })
+
+  it('signs out without asking when nothing is waiting', async () => {
+    renderApp('/pos', 'Cashier')
+    await screen.findByLabelText(t('pos.searchProducts'))
+
+    fireEvent.click(screen.getByRole('button', { name: t('topbar.logout') }))
+
+    await vi.waitFor(() => expect(useAuthStore.getState().status).toBe('anonymous'))
+    expect(screen.queryByRole('dialog', { name: t('offline.logoutTitle') })).not.toBeInTheDocument()
   })
 })

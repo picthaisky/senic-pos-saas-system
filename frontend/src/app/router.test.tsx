@@ -44,7 +44,17 @@ describe('routing', () => {
 
     await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
-    expect(navLinks()).toEqual(['/dashboard', '/pos', '/inventory', '/customers', '/users'])
+    expect(navLinks()).toEqual([
+      '/dashboard',
+      '/pos',
+      '/orders',
+      '/inventory',
+      '/customers',
+      '/users',
+      '/audit',
+      '/settings',
+      '/subscription',
+    ])
   })
 
   it('hides restricted menu items from a cashier and blocks the page itself', async () => {
@@ -68,6 +78,6 @@ describe('routing', () => {
 
     await screen.findByRole('heading', { name: i18n.t('nav.dashboard') })
     expect(router.state.location.pathname).toBe('/dashboard')
-    expect(navLinks()).toEqual(['/dashboard'])
+    expect(navLinks()).toEqual(['/dashboard', '/orders'])
   })
 })

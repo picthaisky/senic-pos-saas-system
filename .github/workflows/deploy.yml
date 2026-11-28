@@ -110,3 +110,17 @@ jobs:
           # which is the same build, so the check is valid for both.
           EXPECTED_VERSION: ${{ needs.images.outputs.tag }}
         run: node deploy/portainer.mjs wait-healthy
+
+      - name: Smoke test of production
+        # Set the SMOKE_URL variable (e.g. https://pos.example.com) to enable. Read-only: it
+        # never changes data. With the SMOKE_* secrets of an Owner or Admin account it also
+        # signs in and reads; without them it checks only what needs no account.
+        if: ${{ vars.SMOKE_URL != '' }}
+        env:
+          SMOKE_URL: ${{ vars.SMOKE_URL }}
+          SMOKE_TENANT_ID: ${{ secrets.SMOKE_TENANT_ID }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          # Only meaningful after the wait above; the webhook path does not pin a version.
+          EXPECTED_VERSION: ${{ vars.HEALTH_URL != '' && needs.images.outputs.tag || '' }}
+        run: node deploy/smoke-test.mjs

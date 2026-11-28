@@ -1,6 +1,8 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import i18n from '@/i18n'
 import { useCartStore } from '@/features/pos/cart-store'
+import { DEFAULT_SHOP_SETTINGS } from '@/features/shop/api'
+import { mockShopSettings } from '@/mocks/mock-data'
 import { renderApp } from '@/test/render-app'
 
 // Screen-level tests against the in-memory mock API (src/mocks/mock-data.ts), whose seed data
@@ -61,8 +63,13 @@ describe('inventory page', () => {
 
 describe('point of sale', () => {
   beforeEach(() => useCartStore.getState().clear())
+  afterEach(() => {
+    mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS }
+  })
 
   it('sells a scanned item and shows the totals returned for the order', async () => {
+    // A shop registered for VAT whose prices are before tax.
+    mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, vatMode: 'Exclusive' }
     renderApp('/pos', 'Cashier')
     const barcodeInput = await screen.findByLabelText(t('pos.scanBarcode'), { selector: 'input' })
 

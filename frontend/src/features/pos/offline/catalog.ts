@@ -12,6 +12,8 @@ export interface ProductLookup<T> {
   result: T
   /** 'local' = answered from the copy on this device; stock levels may be out of date. */
   source: 'server' | 'local'
+  /** For 'local': when the copy was downloaded; absent when this device never got one. */
+  syncedAt?: string
 }
 
 const tenantId = () => useAuthStore.getState().user?.tenantId
@@ -28,11 +30,6 @@ export async function syncCatalog(): Promise<void> {
   }
 }
 
-async function localItems(): Promise<InventoryItem[]> {
-  const tenant = tenantId()
-  return tenant ? ((await offlineDb.getCatalog(tenant))?.items ?? []) : []
-}
-
 /** Runs `online`; if the server cannot be reached, answers from the local catalog instead. */
 async function withFallback<T>(
   online: () => Promise<T>,
@@ -45,7 +42,9 @@ async function withFallback<T>(
       if (!isNetworkError(error)) throw error
     }
   }
-  return { result: local(await localItems()), source: 'local' }
+  const tenant = tenantId()
+  const snapshot = tenant ? await offlineDb.getCatalog(tenant) : undefined
+  return { result: local(snapshot?.items ?? []), source: 'local', syncedAt: snapshot?.syncedAt }
 }
 
 export function searchProducts(query: string): Promise<ProductLookup<InventoryItem[]>> {
