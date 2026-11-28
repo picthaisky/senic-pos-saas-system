@@ -186,6 +186,8 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISalesReportService, SalesReportService>();
+builder.Services.AddScoped<IItemImportService, ItemImportService>();
+builder.Services.AddSingleton<IItemImportReader, SenicPosSaaS.Infrastructure.Reports.ItemImportReader>();
 builder.Services.AddSingleton<ISalesReportWorkbook, SenicPosSaaS.Infrastructure.Reports.SalesReportWorkbook>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();
 

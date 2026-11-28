@@ -2,7 +2,11 @@ import type { Customer, LoyaltyTransaction } from '@/features/customers/types'
 import type { AuditEntry } from '@/features/audit/api'
 import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types'
 import type { DashboardSummary } from '@/features/dashboard/api'
-import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
+import type {
+  CreateInventoryItem,
+  InventoryItem,
+  ItemImportResult,
+} from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
 import type { SalesReport } from '@/features/reports/api'
 import { useAuthStore } from '@/stores/auth'
@@ -648,6 +652,63 @@ export const dataRoutes: MockRoute[] = [
     ({ params }) => {
       const item = items.find((candidate) => candidate.barcode === params.barcode)
       return item ? { status: 200, data: { ...item } } : notFound
+    },
+  ],
+  [
+    'POST',
+    '/inventory/import',
+    // The mock does not read the file: its name decides the answer.
+    ({ body, query }) => {
+      const name = ((body as FormData).get('file') as File).name
+      if (name.endsWith('.txt')) {
+        return problem(400, 'import_file_type', 'The file must be .xlsx or .csv.')
+      }
+      if (name.includes('wrong')) {
+        const result: ItemImportResult = {
+          totalRows: 3,
+          toCreate: 1,
+          toUpdate: 0,
+          stockNotChanged: 0,
+          applied: false,
+          errorCount: 2,
+          errors: [
+            {
+              row: 3,
+              code: 'import_required',
+              params: { column: 'sku' },
+              message: 'sku is required.',
+            },
+            {
+              row: 4,
+              code: 'import_duplicate_sku',
+              params: { sku: 'A-001', row: 2 },
+              message: 'SKU A-001 is also on row 2.',
+            },
+          ],
+        }
+        return { status: 200, data: result }
+      }
+      const applied = String(query.dryRun) !== 'true'
+      if (applied) {
+        items.push({
+          ...items[0],
+          id: uuid(),
+          sku: `IMPORTED-${items.length}`,
+          name: 'สินค้าจากไฟล์',
+          barcode: null,
+          quantity: 10,
+        })
+      }
+      const result: ItemImportResult = {
+        totalRows: 2,
+        toCreate: 1,
+        toUpdate: 1,
+        stockNotChanged: 1,
+        applied,
+        errorCount: 0,
+        errors: [],
+      }
+      return { status: 200, data: result }
     },
   ],
   [

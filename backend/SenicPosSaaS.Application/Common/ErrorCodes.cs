@@ -53,6 +53,28 @@ public static class ErrorCodes
     /// <summary>params: days</summary>
     public const string PeriodTooLong = "period_too_long";
 
+    // Importing items from a file. The first group refuses the whole file.
+    public const string ImportFileType = "import_file_type";
+    public const string ImportFileUnreadable = "import_file_unreadable";
+    public const string ImportFileEmpty = "import_file_empty";
+    /// <summary>params: column</summary>
+    public const string ImportMissingColumn = "import_missing_column";
+    /// <summary>params: max</summary>
+    public const string ImportTooManyRows = "import_too_many_rows";
+    // The rest describe one row of the file ("column" is the name of a field of an item).
+    /// <summary>params: column</summary>
+    public const string ImportRequired = "import_required";
+    /// <summary>params: column, max</summary>
+    public const string ImportTooLong = "import_too_long";
+    /// <summary>params: column</summary>
+    public const string ImportNotANumber = "import_not_a_number";
+    /// <summary>params: column</summary>
+    public const string ImportNotWhole = "import_not_whole";
+    /// <summary>params: sku, row</summary>
+    public const string ImportDuplicateSku = "import_duplicate_sku";
+    /// <summary>params: barcode, row</summary>
+    public const string ImportDuplicateBarcode = "import_duplicate_barcode";
+
     // Push notifications
     public const string PushNotConfigured = "push_not_configured";
     public const string PushEndpointUnknown = "push_endpoint_unknown";

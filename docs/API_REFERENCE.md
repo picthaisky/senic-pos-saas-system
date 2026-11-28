@@ -161,6 +161,7 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 | GET    | `/api/inventory/barcode/{barcode}`                     | ทุก role      | ✅    |
 | GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✅    |
 | POST   | `/api/inventory`                                       | Admin, Owner | ✅    |
+| POST   | `/api/inventory/import?dryRun=`                        | Admin, Owner | ✅    |
 | PUT    | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 | DELETE | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 
@@ -187,6 +188,48 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 `GET /api/inventory/categories` คืน array ของชื่อหมวดหมู่ที่มีใช้อยู่ เรียงตามตัวอักษร ใช้กับตัวกรองและคำแนะนำในฟอร์ม
 รายการสินค้ารองรับการแบ่งหน้า ดูหัวข้อ "การแบ่งหน้า" ในข้อ 1
+
+### นำเข้าสินค้าจากไฟล์ ✅
+
+`POST /api/inventory/import` รับ `multipart/form-data` ที่มีช่อง `file` เป็นไฟล์ `.xlsx` (แผ่นงานแรก) หรือ `.csv` (UTF-8, คั่นด้วย comma) ขนาดไม่เกิน 5 MB และไม่เกิน 5,000 แถว
+
+- แถวแรกเป็นชื่อคอลัมน์ ใช้ชื่อภาษาไทยหรืออังกฤษตามที่หน้าจอส่งออกได้: `SKU`, `ชื่อสินค้า`/`Name`, `บาร์โค้ด`/`Barcode`, `หมวดหมู่`/`Category`, `ราคาขาย`/`Price`, `ต้นทุน`/`Cost`, `คงเหลือ`/`In stock`/`Quantity`, `จุดสั่งซื้อ`/`Reorder point` ต้องมี SKU ชื่อสินค้า และราคาขาย คอลัมน์อื่นที่ไม่รู้จักถูกข้าม
+- **SKU ใหม่** ถูกเพิ่มเป็นสินค้า ช่องที่ว่างได้ค่า 0 หรือว่าง
+- **SKU ที่มีอยู่แล้ว** ถูกแก้ชื่อ ราคา และช่องอื่นที่ไฟล์มีค่า **แต่จำนวนคงเหลือไม่เปลี่ยน** เพราะสต็อกเปลี่ยนจากการขายและการปรับที่มีประวัติ ไฟล์ที่ส่งออกไว้ก่อนหน้าจึงไม่ย้อนยอดขายที่เกิดหลังจากนั้น ช่องที่ว่างหรือคอลัมน์ที่ไม่มีในไฟล์คงค่าเดิมของสินค้า
+- **ทั้งไฟล์หรือไม่มีเลย:** ถ้ามีแถวใดผิด ไม่มีสินค้าใดถูกบันทึก
+- `dryRun=true` ตรวจอย่างเดียว ไม่บันทึก หน้าจอเรียกแบบนี้ก่อนเสมอ
+
+```jsonc
+// 200
+{
+  "totalRows": 120, // แถวที่มีข้อมูล ไม่นับแถวว่าง
+  "toCreate": 100,
+  "toUpdate": 20,
+  "stockNotChanged": 3, // แถวของสินค้าเดิมที่จำนวนในไฟล์ไม่ตรงกับคงเหลือปัจจุบัน
+  "applied": false, // true เมื่อบันทึกแล้ว
+  "errorCount": 2,
+  "errors": [
+    // สูงสุด 200 รายการแรก; row คือเลขแถวตามที่เห็นในโปรแกรมตาราง
+    {
+      "row": 14,
+      "code": "import_required",
+      "params": { "column": "name" },
+      "message": "name is required.",
+    },
+    {
+      "row": 20,
+      "code": "import_duplicate_sku",
+      "params": { "sku": "A-001", "row": 5 },
+      "message": "…",
+    },
+  ],
+}
+```
+
+- ไฟล์ที่ใช้ไม่ได้ทั้งไฟล์ได้ `400` พร้อม `code`: `import_file_type`, `import_file_unreadable`, `import_file_empty`, `import_missing_column`, `import_too_many_rows`
+- ข้อผิดพลาดรายแถว: `import_required`, `import_too_long`, `import_not_a_number`, `import_not_whole`, `import_duplicate_sku`, `import_duplicate_barcode`, `barcode_taken` ค่า `column` ใน `params` เป็นชื่อ field ของสินค้า (`sku`, `name`, `price`, …)
+- บาร์โค้ดที่สินค้าอื่นของร้านใช้อยู่ถูกปฏิเสธ แม้ไฟล์เดียวกันจะย้ายบาร์โค้ดออกจากสินค้านั้น ต้องล้างบาร์โค้ดเดิมก่อน
+- ยังไม่รองรับ: รูปสินค้า, การปิดใช้งานสินค้าจากไฟล์, และไฟล์ `.xls` รุ่นเก่า
 
 ## 4. Customers
 

@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using SenicPosSaaS.API.Auth;
 using SenicPosSaaS.Application.DTOs;
 using SenicPosSaaS.Application.DTOs.InventoryItem;
+using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.Interfaces;
+using SenicPosSaaS.Application.Services;
 using SenicPosSaaS.Domain.Common;
 
 namespace SenicPosSaaS.API.Controllers;
@@ -11,13 +13,47 @@ namespace SenicPosSaaS.API.Controllers;
 [Route("api/[controller]")]
 public class InventoryController : TenantControllerBase
 {
+    /// <summary>Largest file an import accepts.</summary>
+    private const long MaxImportBytes = 5 * 1024 * 1024;
+
     private readonly IInventoryItemService _inventoryService;
+    private readonly IItemImportService _importService;
+    private readonly IItemImportReader _importReader;
     private readonly ILogger<InventoryController> _logger;
 
-    public InventoryController(IInventoryItemService inventoryService, ILogger<InventoryController> logger)
+    public InventoryController(IInventoryItemService inventoryService, IItemImportService importService, IItemImportReader importReader, ILogger<InventoryController> logger)
     {
         _inventoryService = inventoryService;
+        _importService = importService;
+        _importReader = importReader;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Items from an .xlsx or .csv file (form field "file"; headings on the first row: SKU, name
+    /// and price are needed). A new SKU becomes an item; a known SKU has its details replaced
+    /// but keeps its stock. With <paramref name="dryRun"/> nothing is saved: the answer says
+    /// what would happen. A file with a wrong row saves nothing either, and lists the rows.
+    /// </summary>
+    [HttpPost("import")]
+    [Authorize(Roles = Roles.Managers)]
+    [RequestSizeLimit(MaxImportBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxImportBytes)]
+    [ProducesResponseType(typeof(ItemImportResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ItemImportResultDto>> Import(IFormFile? file, [FromQuery] bool dryRun = false, CancellationToken cancellationToken = default)
+    {
+        if (file == null || file.Length == 0)
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.ImportFileEmpty, "The file is empty.");
+
+        ImportTable table;
+        await using (var stream = file.OpenReadStream())
+            table = _importReader.Read(stream, file.FileName);
+
+        var result = await _importService.ImportAsync(TenantId, table, dryRun, cancellationToken);
+        if (result.Applied)
+            _logger.LogInformation("Imported items: {Created} new, {Updated} updated", result.ToCreate, result.ToUpdate);
+        return Ok(result);
     }
 
     /// <summary>

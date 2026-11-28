@@ -256,6 +256,31 @@ if (!credentials) {
     const remove = await call('DELETE', `/api/customers/${second.json?.id}`)
     check('delete customer', remove.status === 204, `status ${remove.status}`)
 
+    // Items from a file: checked first, saved on the second call; a wrong row saves nothing.
+    const stamp = Date.now()
+    const upload = async (csv, query = '') => {
+      const form = new FormData()
+      form.append('file', new Blob([csv], { type: 'text/csv' }), 'items.csv')
+      const res = await fetch(base + '/api/inventory/import' + query, { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) } })
+      return { status: res.status, json: await res.json().catch(() => undefined) }
+    }
+    const file = `SKU,ชื่อสินค้า,ราคาขาย,คงเหลือ\nSMOKE-${stamp}-1,"สินค้านำเข้า, หนึ่ง",12.50,4\nSMOKE-${stamp}-2,สินค้านำเข้าสอง,8,0\n`
+    const checked = await upload(file, '?dryRun=true')
+    const imported = await upload(file)
+    const found = await call('GET', `/api/inventory?search=SMOKE-${stamp}&page=1`)
+    check(
+      'items are imported from a file, after a check that saves nothing',
+      checked.status === 200 && checked.json?.applied === false && checked.json?.toCreate === 2 && imported.json?.applied === true && found.json?.total === 2 && found.json.items.some((i) => i.name === 'สินค้านำเข้า, หนึ่ง' && i.price === 12.5 && i.quantity === 4),
+      `check ${checked.status}, import ${imported.status}, found ${found.json?.total}`,
+    )
+    const wrong = await upload(`sku,name,price\nSMOKE-${stamp}-3,ดี,1\nSMOKE-${stamp}-4,,abc\n`)
+    const afterWrong = await call('GET', `/api/inventory?search=SMOKE-${stamp}&page=1`)
+    check(
+      'a file with a wrong row saves nothing and names the row',
+      wrong.status === 200 && wrong.json?.applied === false && wrong.json?.errorCount === 2 && wrong.json.errors.every((e) => e.row === 3) && afterWrong.json?.total === 2,
+      `status ${wrong.status}, errors ${wrong.json?.errorCount}`,
+    )
+
     // A throw-away member of staff: added, signs in, is deactivated, can no longer sign in.
     const staff = {
       tenantId: credentials.tenantId,
