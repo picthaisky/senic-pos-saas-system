@@ -153,8 +153,7 @@ Stack สำรองฐานข้อมูลเองสองแบบ เ�
 
 - ถ้าการสำรองก่อน deploy ล้มเหลว API รุ่นใหม่จะไม่ start (ไม่มีข้อมูลสำรอง ก็ไม่ migrate) ดูสาเหตุที่ log ของ container `backup-before-deploy`
 - Container `backup` เป็น unhealthy เมื่อไฟล์สำรองตามเวลาล่าสุดเกินกำหนดไปมากกว่า 2 ชั่วโมง
-- **ไฟล์สำรองอยู่บน server เดียวกับฐานข้อมูล** ถ้า server หรือดิสก์เสีย จะเสียทั้งคู่ ต้องคัดลอก volume `db-backups`
-  ไปเก็บที่อื่นเป็นประจำ (เช่น rclone ไป object storage หรือ rsync ไปอีกเครื่อง) ส่วนนี้ยังไม่ได้ทำให้อัตโนมัติ
+- **ไฟล์สำรองอยู่บน server เดียวกับฐานข้อมูล** ถ้า server หรือดิสก์เสีย จะเสียทั้งคู่ จนกว่าจะตั้งปลายทางนอก server ตามหัวข้อถัดไป
 - เผื่อพื้นที่ดิสก์ประมาณ 20 เท่าของขนาดไฟล์ dump หนึ่งไฟล์
 
 สั่งสำรองเองและดูรายการไฟล์ (ใน Portainer ใช้ Console ของ container `backup` หรือใช้ `docker exec`):
@@ -193,6 +192,43 @@ docker start <container api> <container web>
 ระบบ migrate ต่อและ smoke test ผ่านครบ ฐานข้อมูลทดสอบมีข้อมูลน้อยมากจึงใช้เวลาไม่ถึงหนึ่งวินาที
 **ยังไม่รู้เวลาที่ใช้กับข้อมูลขนาดจริง** ให้ซ้อมอีกครั้งเมื่อมีข้อมูลจริงและจดเวลาไว้
 CI ซ้อมกู้คืนลงฐานข้อมูลเปล่าทุกครั้งที่รัน (job `stack`)
+
+### เก็บสำเนานอก server
+
+Container `backup-offsite` คัดลอกไฟล์ `.dump` ทุกไฟล์ไปยังที่เก็บแบบ S3 (AWS S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO และผู้ให้บริการอื่นที่ใช้ API เดียวกัน)
+**ปิดอยู่จนกว่าจะตั้ง `BACKUP_S3_BUCKET`** กำหนดปลายทางที่ตัวแปรของ stack ใน Portainer แล้วกด Update the stack:
+
+| ตัวแปร                         | ความหมาย                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| `BACKUP_S3_BUCKET`            | ชื่อ bucket ต้องสร้างไว้ก่อน และต้องเป็น private                                               |
+| `BACKUP_S3_ACCESS_KEY_ID`     | Access key ควรสร้างเฉพาะสำหรับงานนี้ และเข้าได้เฉพาะ bucket นี้                                |
+| `BACKUP_S3_SECRET_ACCESS_KEY` | Secret ของ key ข้างบน                                                                   |
+| `BACKUP_S3_ENDPOINT`          | ที่อยู่ S3 ของผู้ให้บริการ เช่น `https://<account>.r2.cloudflarestorage.com` เว้นว่างสำหรับ AWS S3 |
+| `BACKUP_S3_REGION`            | AWS S3 ต้องใส่ (เช่น `ap-southeast-1`) ผู้ให้บริการอื่นส่วนใหญ่เว้นว่างได้                           |
+| `BACKUP_S3_PROVIDER`          | `AWS`, `Cloudflare`, `Backblaze`, `Wasabi`, `Minio` หรือ `Other` (ค่าเริ่มต้น ใช้ได้กับส่วนใหญ่) |
+| `BACKUP_S3_PREFIX`            | โฟลเดอร์ใน bucket ค่าเริ่มต้น `senic-pos` ใช้ชื่อต่างกันถ้าหลายระบบใช้ bucket เดียวกัน               |
+| `BACKUP_OFFSITE_KEEP_DAYS`    | ลบสำเนาที่เก่ากว่านี้ ค่าเริ่มต้น 90 วัน ใส่ `0` เพื่อเก็บตลอด                                        |
+
+- ตรวจทุก 5 นาที ไฟล์ที่ส่งแล้วไม่ถูกส่งซ้ำ ไฟล์ใหม่จึงไปถึงปลายทางภายในประมาณ 5 นาทีหลังสำรองเสร็จ
+- ถ้าส่งไม่สำเร็จ จะลองใหม่ทุก 5 นาที และ container เป็น unhealthy เมื่อไม่มีการส่งสำเร็จเกิน 30 นาที ดูสาเหตุที่ log ของ `backup-offsite`
+- Container นี้อ่าน volume `db-backups` ได้อย่างเดียว จึงทำไฟล์สำรองในเครื่องเสียไม่ได้
+- ไฟล์สำรองมีข้อมูลลูกค้าและรหัสผ่านที่ hash แล้ว และ **ไม่ถูกเข้ารหัสก่อนส่ง** ให้เปิดการเข้ารหัสฝั่งผู้ให้บริการและอย่าเปิด bucket เป็นสาธารณะ
+- ยืนยันหลังตั้งค่า: log ของ `backup-offsite` ต้องขึ้น `copying backups to offsite:...` และไฟล์ต้องปรากฏใน bucket
+
+ดึงไฟล์จากปลายทางกลับมาเมื่อ server เดิมใช้ไม่ได้ (รันบน server ใหม่ที่สร้าง stack ด้วยตัวแปรชุดเดิมแล้ว):
+
+```bash
+# ดูว่ามีไฟล์อะไรอยู่ที่ปลายทาง
+docker compose -p senicpos run --rm --entrypoint sh backup-offsite -c \
+  'rclone lsl "offsite:$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX"'
+
+# ดึงไฟล์ที่ต้องการลง volume db-backups แล้วกู้คืนตามขั้นตอนด้านบน
+docker compose -p senicpos run --rm --entrypoint sh -v senicpos_db-backups:/restore backup-offsite -c \
+  'rclone copy "offsite:$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX" /restore --include "scheduled-20261128T*.dump"'
+```
+
+ซ้อมแล้วกับที่เก็บ S3 จำลอง: ตั้งปลายทาง ไฟล์ไปถึงและ checksum ตรงกัน ดึงกลับมากู้คืนลงฐานข้อมูลเปล่าได้ และเมื่อปลายทางล่ม ไฟล์ในเครื่องไม่เสีย
+ยังไม่ได้ลองกับผู้ให้บริการจริงรายใด
 
 ## Rollback
 

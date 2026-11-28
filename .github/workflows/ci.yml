@@ -138,6 +138,28 @@ jobs:
             [ "$live" -gt 0 ] && [ "$live" = "$restored" ]
             dropdb restore_check'
 
+      - name: Off-site backup rehearsal
+        run: |
+          compose() { docker compose -p ci --env-file "$RUNNER_TEMP/stack.env" -f deploy/docker-compose.yml "$@"; }
+          # A throw-away S3 server stands in for the real storage: rclone can serve one itself.
+          key="$(openssl rand -hex 8)"; secret="$(openssl rand -hex 16)"
+          echo "::add-mask::$secret"
+          docker run -d --name s3 --network ci_internal --entrypoint sh rclone/rclone:1.76 -c \
+            "mkdir -p /data/backups && exec rclone serve s3 /data --addr :9000 --auth-key '$key,$secret'"
+          {
+            echo "BACKUP_S3_BUCKET=backups"
+            echo "BACKUP_S3_ENDPOINT=http://s3:9000"
+            echo "BACKUP_S3_ACCESS_KEY_ID=$key"
+            echo "BACKUP_S3_SECRET_ACCESS_KEY=$secret"
+          } >> "$RUNNER_TEMP/stack.env"
+          # Setting the destination and redeploying is all an operator does. The service is
+          # healthy only once a copy has succeeded.
+          compose up -d --wait backup-offsite
+          here="$(compose exec -T backup sh -c 'cd /backups && sha256sum *.dump | sort')"
+          there="$(docker exec s3 sh -c 'cd /data/backups/senic-pos && sha256sum *.dump | sort')"
+          echo "$here"
+          [ -n "$here" ] && [ "$here" = "$there" ]
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
