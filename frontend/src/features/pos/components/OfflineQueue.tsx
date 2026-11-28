@@ -1,4 +1,4 @@
-import { CloudUpload, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { CloudUpload, Download, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge, Button, ConfirmDialog, Modal } from '@/components/ui'
@@ -6,6 +6,7 @@ import { formatCurrency, formatDateTime } from '@/lib/format'
 import { useNetworkStore } from '@/stores/network'
 import { toast } from '@/stores/toast'
 import type { QueuedOrder } from '../offline/db'
+import { exportQueue, isStale, STALE_AFTER_HOURS } from '../offline/export'
 import {
   discardOrder,
   retryOrder,
@@ -13,6 +14,7 @@ import {
   syncQueue,
   useOrderQueue,
 } from '../offline/queue'
+import { useStorageProtection } from '../offline/storage'
 
 /**
  * Topbar button showing how many sales are waiting to be sent. Hidden while the queue is
@@ -23,6 +25,7 @@ export function OfflineQueueButton() {
   const orders = useOrderQueue((state) => state.orders)
   const syncing = useOrderQueue((state) => state.syncing)
   const online = useNetworkStore((state) => state.online)
+  const protection = useStorageProtection((state) => state.protection)
   const [open, setOpen] = useState(false)
   const [discarding, setDiscarding] = useState<QueuedOrder | null>(null)
 
@@ -30,6 +33,7 @@ export function OfflineQueueButton() {
 
   const hasFailed = orders.some((order) => order.status === 'failed')
   const hasPending = orders.some((order) => order.status === 'pending')
+  const hasStale = orders.some((order) => isStale(order))
 
   function report({ sent, failed }: SyncReport) {
     if (sent > 0) toast.success(t('offline.synced', { count: sent }))
@@ -46,7 +50,7 @@ export function OfflineQueueButton() {
         aria-label={t('offline.queueButton', { count: orders.length })}
         title={t('offline.queueButton', { count: orders.length })}
       >
-        {hasFailed ? (
+        {hasFailed || hasStale ? (
           <TriangleAlert className="size-5 text-danger" />
         ) : (
           <CloudUpload className="size-5 text-warning" />
@@ -59,14 +63,24 @@ export function OfflineQueueButton() {
         onClose={() => setOpen(false)}
         title={t('offline.queueTitle')}
         footer={
-          <Button
-            disabled={!online || !hasPending}
-            loading={syncing}
-            onClick={() => void syncQueue().then(report)}
-          >
-            {!syncing && <CloudUpload className="size-5" />}
-            {t('offline.syncNow')}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              disabled={orders.length === 0}
+              onClick={() => exportQueue(orders)}
+            >
+              <Download className="size-5" />
+              {t('offline.exportFile')}
+            </Button>
+            <Button
+              disabled={!online || !hasPending}
+              loading={syncing}
+              onClick={() => void syncQueue().then(report)}
+            >
+              {!syncing && <CloudUpload className="size-5" />}
+              {t('offline.syncNow')}
+            </Button>
+          </>
         }
       >
         {orders.length === 0 ? (
@@ -74,6 +88,15 @@ export function OfflineQueueButton() {
         ) : (
           <>
             {!online && <p className="mb-3 text-sm text-muted">{t('offline.willSyncLater')}</p>}
+            {(hasStale || protection === 'best-effort') && (
+              <div
+                role="alert"
+                className="mb-3 flex flex-col gap-1 rounded-lg bg-warning/15 px-3 py-2 text-sm"
+              >
+                {hasStale && <p>{t('offline.staleWarning', { hours: STALE_AFTER_HOURS })}</p>}
+                {protection === 'best-effort' && <p>{t('offline.notProtected')}</p>}
+              </div>
+            )}
             <ul className="divide-y divide-border">
               {orders.map((order) => (
                 <li key={order.clientOrderId} className="flex flex-col gap-1 py-3">

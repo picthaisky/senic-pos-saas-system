@@ -9,6 +9,7 @@ import { ordersApi } from '../api'
 import type { CreateOrder, Order } from '../types'
 import { deductLocalStock, syncCatalog } from './catalog'
 import { offlineDb, type QueuedOrder } from './db'
+import { protectStorage } from './storage'
 
 // Sales made while the server is unreachable are kept in IndexedDB and sent later. Sending is
 // safe to repeat: every order carries a clientOrderId and the server ignores duplicates.
@@ -59,6 +60,8 @@ export async function submitSale(
     status: 'pending',
   }
   await offlineDb.putOrder(queued)
+  // From here on this device holds a sale that exists nowhere else.
+  void protectStorage()
   await deductLocalStock(request.items)
   await loadQueue()
   return { kind: 'queued', queued }

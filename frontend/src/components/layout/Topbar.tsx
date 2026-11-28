@@ -1,12 +1,14 @@
-import { KeyRound, Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
+import { Download, KeyRound, Languages, LogOut, Menu, Moon, Sun, WifiOff } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { InstallAppButton } from '@/components/PwaPrompt'
 import { PushToggle } from '@/components/PushToggle'
-import { Button } from '@/components/ui'
+import { Button, ConfirmDialog } from '@/components/ui'
 import { authApi } from '@/features/auth/api'
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal'
 import { OfflineQueueButton } from '@/features/pos/components/OfflineQueue'
+import { exportQueue } from '@/features/pos/offline/export'
+import { useOrderQueue } from '@/features/pos/offline/queue'
 import { disablePush } from '@/lib/push'
 import { useAuthStore } from '@/stores/auth'
 import { useNetworkStore } from '@/stores/network'
@@ -20,8 +22,11 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const online = useNetworkStore((state) => state.online)
   const [loggingOut, setLoggingOut] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
+  const queued = useOrderQueue((state) => state.orders)
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
 
   async function handleLogout() {
+    setConfirmingLogout(false)
     setLoggingOut(true)
     // While the access token still works: stop this browser receiving this user's alerts,
     // so the next person to use the device does not get them.
@@ -102,7 +107,8 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         size="sm"
         className="h-10"
         loading={loggingOut}
-        onClick={handleLogout}
+        // Unsent sales stay on this device; whoever signs out should know they are leaving them.
+        onClick={() => (queued.length > 0 ? setConfirmingLogout(true) : void handleLogout())}
       >
         {!loggingOut && <LogOut className="size-5" />}
         {/* Icon-only on small screens; the label stays available to screen readers. */}
@@ -110,6 +116,20 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
       </Button>
 
       {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
+
+      <ConfirmDialog
+        open={confirmingLogout}
+        title={t('offline.logoutTitle')}
+        confirmLabel={t('topbar.logout')}
+        onConfirm={() => void handleLogout()}
+        onCancel={() => setConfirmingLogout(false)}
+      >
+        <p>{t('offline.logoutWarning', { count: queued.length })}</p>
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => exportQueue(queued)}>
+          <Download className="size-4" />
+          {t('offline.exportFile')}
+        </Button>
+      </ConfirmDialog>
     </header>
   )
 }

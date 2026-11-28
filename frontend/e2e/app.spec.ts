@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 // The main journeys of the app in a real browser, against a real backend and database.
 // Texts are the Thai UI strings (the default language).
@@ -132,6 +133,8 @@ test('keeps selling while offline and sends the sale when the connection returns
   await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
   await expect(page.getByRole('region', { name: 'ตะกร้า' })).toBeVisible()
   await page.waitForTimeout(1500)
+  // The app itself must be installed too, or it could not be reopened without a connection.
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined))
 
   await context.setOffline(true)
   await expect(page.getByText('ออฟไลน์', { exact: true })).toBeVisible()
@@ -144,7 +147,31 @@ test('keeps selling while offline and sends the sale when the connection returns
   await expect(saved).toBeVisible()
   await shot(page, '06-offline-sale')
   await saved.getByRole('button', { name: 'ขายรายการใหม่' }).click()
-  await expect(page.getByRole('button', { name: 'รายการขายที่รอส่ง 1 รายการ' })).toBeVisible()
+  const queueButton = page.getByRole('button', { name: 'รายการขายที่รอส่ง 1 รายการ' })
+  await expect(queueButton).toBeVisible()
+
+  // The unsent sale can be taken out of the browser as a file ...
+  await queueButton.click()
+  const queue = page.getByRole('dialog', { name: 'รายการขายที่รอส่ง' })
+  const download = page.waitForEvent('download')
+  await queue.getByRole('button', { name: 'ส่งออกเป็นไฟล์' }).click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^offline-sales-.*.csv$/)
+  expect(readFileSync(await file.path(), 'utf8')).toContain(item.name)
+  await shot(page, '06b-offline-queue')
+  await page.keyboard.press('Escape')
+
+  // ... signing out asks first ...
+  await page.getByRole('button', { name: 'ออกจากระบบ' }).click()
+  const warning = page.getByRole('dialog', { name: 'ยังมีรายการขายที่ไม่ได้ส่ง' })
+  await expect(warning.getByText(/1 รายการที่ยังไม่ถึงเซิร์ฟเวอร์/)).toBeVisible()
+  await shot(page, '06c-sign-out-warning')
+  await warning.getByRole('button', { name: 'ยกเลิก' }).click()
+
+  // ... and it is still there after the page is closed and opened again without a connection.
+  await page.reload()
+  await expect(page.getByText('ออฟไลน์', { exact: true })).toBeVisible()
+  await expect(queueButton).toBeVisible()
 
   await context.setOffline(false)
   await expect(page.getByText('ส่งรายการขายที่ค้างแล้ว 1 รายการ')).toBeVisible({ timeout: 20_000 })

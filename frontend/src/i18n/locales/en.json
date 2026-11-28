@@ -302,7 +302,28 @@
     "syncRefused_other": "The server did not accept {{count}} sales. Please review them.",
     "discard": "Discard",
     "discardTitle": "Discard sale",
-    "discardConfirm": "This sale will not be recorded anywhere and cannot be recovered. Discard it?"
+    "discardConfirm": "This sale will not be recorded anywhere and cannot be recovered. Discard it?",
+    "catalogSyncedAt": "Product data last updated {{time}}",
+    "catalogNeverSynced": "This device has never downloaded the product list. Open the till once while online first.",
+    "exportFile": "Export to file",
+    "staleWarning": "Some sales have been waiting for more than {{hours}} hours. Connect to the internet to send them, or export them to a file first.",
+    "staleToast_one": "{{count}} sale has been waiting on this device for more than a day. Please check.",
+    "staleToast_other": "{{count}} sales have been waiting on this device for more than a day. Please check.",
+    "notProtected": "This browser does not promise to keep these sales. Do not clear the site's data, and keep an exported file until they are sent.",
+    "logoutTitle": "Some sales have not been sent",
+    "logoutWarning_one": "{{count}} sale has not reached the server. It stays on this device and is sent when a user of this shop signs in here again. If the browser's data is cleared before then, it is lost.",
+    "logoutWarning_other": "{{count}} sales have not reached the server. They stay on this device and are sent when a user of this shop signs in here again. If the browser's data is cleared before then, they are lost.",
+    "export": {
+      "time": "Time of sale",
+      "reference": "Reference",
+      "status": "Status",
+      "item": "Item",
+      "quantity": "Quantity",
+      "unitPrice": "Unit price",
+      "billTotal": "Bill total (estimate)",
+      "payment": "Payment",
+      "reason": "Why it was not accepted"
+    }
   },
   "pwa": {
     "updateAvailable": "A new version is ready",
