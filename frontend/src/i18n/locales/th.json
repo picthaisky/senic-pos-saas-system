@@ -43,6 +43,7 @@
     "customers": "ลูกค้า",
     "users": "ผู้ใช้งาน",
     "audit": "ประวัติการแก้ไข",
+    "subscription": "แพ็กเกจของร้าน",
     "openMenu": "เปิดเมนู",
     "closeMenu": "ปิดเมนู"
   },
@@ -145,7 +146,12 @@
     "balance": "แต้มคงเหลือ {{points}}",
     "notEnoughPoints": "แต้มไม่พอ",
     "history": "ประวัติแต้ม",
-    "noHistory": "ยังไม่มีรายการ"
+    "noHistory": "ยังไม่มีรายการ",
+    "editCustomer": "แก้ไขลูกค้า",
+    "editNamed": "แก้ไข {{name}}",
+    "address": "ที่อยู่",
+    "saved": "บันทึกลูกค้าแล้ว",
+    "emailTaken": "มีลูกค้าที่ใช้อีเมลนี้อยู่แล้ว"
   },
   "users": {
     "list": "รายชื่อผู้ใช้งาน",
@@ -244,6 +250,33 @@
       "Completed": "สำเร็จ",
       "Cancelled": "ยกเลิก"
     }
+  },
+  "subscription": {
+    "none": "ร้านนี้ยังไม่มีข้อมูลแพ็กเกจในระบบ กรุณาติดต่อผู้ให้บริการ",
+    "plan": "แพ็กเกจ",
+    "plans": {
+      "Basic": "Basic",
+      "Pro": "Pro",
+      "Enterprise": "Enterprise"
+    },
+    "status": "สถานะ",
+    "statuses": {
+      "Active": "ใช้งานอยู่",
+      "Inactive": "ยังไม่เปิดใช้งาน",
+      "Suspended": "ถูกระงับ",
+      "Cancelled": "ยกเลิกแล้ว",
+      "Expired": "หมดอายุ"
+    },
+    "period": "รอบปัจจุบัน",
+    "daysLeft": "เหลือเวลา",
+    "days": "{{count}} วัน",
+    "monthlyFee": "ค่าบริการรายเดือน",
+    "autoRenew": "ต่ออายุอัตโนมัติ",
+    "on": "เปิด",
+    "off": "ปิด",
+    "endingSoon": "แพ็กเกจจะสิ้นสุดในอีก {{count}} วัน",
+    "ended": "แพ็กเกจสิ้นสุดแล้ว",
+    "contact": "ต้องการต่ออายุหรือเปลี่ยนแพ็กเกจ กรุณาติดต่อผู้ให้บริการ"
   },
   "pos": {
     "scanBarcode": "สแกนบาร์โค้ด",

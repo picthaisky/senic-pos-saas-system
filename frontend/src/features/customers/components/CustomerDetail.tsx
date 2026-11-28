@@ -19,10 +19,11 @@ export function CustomerDetail({ customer }: { customer: Customer }) {
   return (
     <Card title={customer.fullName}>
       <div className="flex flex-col gap-4">
-        {(customer.email || customer.phone) && (
+        {(customer.email || customer.phone || customer.address) && (
           <div className="text-sm text-muted">
             {customer.email && <p>{customer.email}</p>}
             {customer.phone && <p>{customer.phone}</p>}
+            {customer.address && <p>{customer.address}</p>}
           </div>
         )}
 

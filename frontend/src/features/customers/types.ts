@@ -21,6 +21,11 @@ export interface CreateCustomer {
   phone: string | null
 }
 
+/** PUT /customers/{id}: a field left out stays as it is; an empty string clears it. */
+export type UpdateCustomer = Partial<
+  Record<'firstName' | 'lastName' | 'email' | 'phone' | 'address', string>
+>
+
 export interface LoyaltyTransaction {
   id: string
   customerId: string

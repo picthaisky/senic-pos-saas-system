@@ -226,6 +226,40 @@ test('finds a sale in the sales history, cancels it and gets the stock back', as
   await expect(stock.getByRole('cell', { name: '5', exact: true })).toBeVisible()
 })
 
+test('adds a customer, corrects their details, and opens the subscription page', async ({
+  page,
+}) => {
+  await signIn(page)
+  const id = `${Date.now()}`.slice(-8)
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByLabel('ชื่อ', { exact: true }).fill(`ลูกค้า${id}`)
+  await page.getByLabel('นามสกุล').fill('ทดสอบ')
+  await page.getByRole('button', { name: 'เพิ่มลูกค้า' }).click()
+  await expect(page.getByText('เพิ่มลูกค้าแล้ว')).toBeVisible()
+
+  await page.getByRole('button', { name: `แก้ไข ลูกค้า${id} ทดสอบ` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขลูกค้า' })
+  await dialog.getByLabel('นามสกุล').fill('แก้แล้ว')
+  await dialog.getByLabel('เบอร์โทร').fill('0811112222')
+  await dialog.getByLabel('ที่อยู่').fill('99 ถนนทดสอบ')
+  await shot(page, '14-customer-edit')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกลูกค้าแล้ว')).toBeVisible()
+
+  const row = page.getByRole('row', { name: new RegExp(`ลูกค้า${id} แก้แล้ว`) })
+  await expect(row.getByText('0811112222')).toBeVisible()
+  // The server kept it: still there after a reload, address included.
+  await page.reload()
+  await page.getByRole('button', { name: `ดูรายละเอียด ลูกค้า${id} แก้แล้ว` }).click()
+  await expect(page.getByText('99 ถนนทดสอบ')).toBeVisible()
+
+  // A stack started from scratch has no subscription on record; the page says so plainly.
+  await page.getByRole('link', { name: 'แพ็กเกจของร้าน' }).click()
+  await expect(page.getByRole('heading', { name: 'แพ็กเกจของร้าน' })).toBeVisible()
+  await expect(page.getByText(/ยังไม่มีข้อมูลแพ็กเกจ/)).toBeVisible()
+  await shot(page, '15-subscription')
+})
+
 test('updates another open window when a sale happens', async ({ page, context }) => {
   await signIn(page)
   const item = await addItem(page, { price: '100', quantity: '6', minimumStock: '5' })

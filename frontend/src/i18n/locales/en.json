@@ -43,6 +43,7 @@
     "customers": "Customers",
     "users": "Users",
     "audit": "Change history",
+    "subscription": "Subscription",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
   },
@@ -146,7 +147,12 @@
     "balance": "Balance: {{points}} points",
     "notEnoughPoints": "Not enough points",
     "history": "Points history",
-    "noHistory": "No transactions yet"
+    "noHistory": "No transactions yet",
+    "editCustomer": "Edit customer",
+    "editNamed": "Edit {{name}}",
+    "address": "Address",
+    "saved": "Customer saved",
+    "emailTaken": "Another customer already uses this email"
   },
   "users": {
     "list": "Users",
@@ -245,6 +251,35 @@
       "Completed": "Completed",
       "Cancelled": "Cancelled"
     }
+  },
+  "subscription": {
+    "none": "This shop has no subscription on record. Please contact your provider.",
+    "plan": "Plan",
+    "plans": {
+      "Basic": "Basic",
+      "Pro": "Pro",
+      "Enterprise": "Enterprise"
+    },
+    "status": "Status",
+    "statuses": {
+      "Active": "Active",
+      "Inactive": "Not active yet",
+      "Suspended": "Suspended",
+      "Cancelled": "Cancelled",
+      "Expired": "Expired"
+    },
+    "period": "Current period",
+    "daysLeft": "Time left",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "monthlyFee": "Monthly fee",
+    "autoRenew": "Automatic renewal",
+    "on": "On",
+    "off": "Off",
+    "endingSoon_one": "The subscription ends in {{count}} day",
+    "endingSoon_other": "The subscription ends in {{count}} days",
+    "ended": "The subscription has ended",
+    "contact": "To renew or change plan, please contact your provider."
   },
   "pos": {
     "scanBarcode": "Scan barcode",

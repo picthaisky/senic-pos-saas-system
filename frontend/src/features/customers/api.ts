@@ -1,12 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import type { CreateCustomer, Customer, LoyaltyRequest, LoyaltyTransaction } from './types'
+import type {
+  CreateCustomer,
+  Customer,
+  LoyaltyRequest,
+  LoyaltyTransaction,
+  UpdateCustomer,
+} from './types'
 
 export const customersApi = {
   list: () => api.get<Customer[]>('/customers').then((r) => r.data),
 
   create: (customer: CreateCustomer) =>
     api.post<Customer>('/customers', customer).then((r) => r.data),
+
+  /** Rejects with 409 when another customer of the shop already has that email. */
+  update: (id: string, changes: UpdateCustomer) =>
+    api.put<Customer>(`/customers/${id}`, changes).then((r) => r.data),
 
   remove: (id: string) => api.delete<void>(`/customers/${id}`),
 
@@ -36,6 +46,18 @@ export function useCreateCustomer() {
   return useMutation({
     mutationFn: customersApi.create,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY }),
+  })
+}
+
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; changes: UpdateCustomer }) =>
+      customersApi.update(input.id, input.changes),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY })
+      void queryClient.invalidateQueries({ queryKey: ['audit'] })
+    },
   })
 }
 

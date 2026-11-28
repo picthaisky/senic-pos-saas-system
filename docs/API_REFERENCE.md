@@ -162,6 +162,9 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
   "description": "...", "createdAt": "..." }
 ```
 
+`PUT /api/customers/{id}` แก้เฉพาะ field ที่ส่งมา: field ที่ไม่ส่งหรือเป็น `null` คงค่าเดิม ส่วน `email`, `phone`, `address` ที่ส่งเป็นข้อความว่าง (`""`) คือการล้างค่า
+อีเมลซ้ำกับลูกค้าอื่นในร้านได้ `409` และ `dateOfBirth` ยังล้างค่าไม่ได้
+
 Frontend เปลี่ยนมาใช้ `firstName` และ `lastName` (เดิมใช้ `name` field เดียว)
 ส่วน `totalSpent` และ `visitCount` ที่หน้าจอเดิมแสดง backend ยังไม่มี จึงตัดออกจาก v1
 
@@ -242,7 +245,8 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 | GET    | `/health`                          | ไม่ต้อง login         | ✅ ตัวแอปทำงาน (liveness) และบอก `version`         |
 | GET    | `/health/ready`                    | ไม่ต้อง login         | ✅ ต่อฐานข้อมูลได้ ถ้าไม่ได้ตอบ `503` ใช้ตัวนี้กับระบบเฝ้าระวัง |
 
-Frontend เดิมยังไม่มีหน้า Subscription จึงไม่อยู่ในขอบเขตการย้ายรอบแรก
+หน้า "แพ็กเกจของร้าน" แสดงผลของ `GET /api/subscriptions/current` แบบอ่านอย่างเดียว (`404` = ร้านยังไม่มีข้อมูลแพ็กเกจ ซึ่งเป็นสถานะของร้านที่สร้างจาก bootstrap)
+ยังไม่มีปุ่มต่ออายุ เพราะ `POST /api/subscriptions/current/renew` ต่ออายุหนึ่งเดือนทันทีโดยไม่มีการชำระเงิน
 
 ### ประวัติการแก้ไข (Audit trail) ✅
 

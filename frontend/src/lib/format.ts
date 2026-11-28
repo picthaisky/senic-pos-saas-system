@@ -28,6 +28,11 @@ export function formatDateTime(iso: string): string {
   )
 }
 
+/** A day without the time, e.g. 28 พ.ย. 2569. */
+export function formatDate(iso: string): string {
+  return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium' }).format(new Date(iso))
+}
+
 /** The local calendar day as `YYYY-MM-DD`: the value of a date input and of the API's day filters. */
 export function toIsoDate(date: Date): string {
   return [date.getFullYear(), date.getMonth() + 1, date.getDate()]

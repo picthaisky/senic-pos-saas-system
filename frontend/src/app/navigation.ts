@@ -2,6 +2,7 @@ import {
   History,
   LayoutDashboard,
   type LucideIcon,
+  BadgeCheck,
   Package,
   Receipt,
   ShoppingCart,
@@ -20,6 +21,7 @@ export interface NavItem {
     | 'nav.customers'
     | 'nav.users'
     | 'nav.audit'
+    | 'nav.subscription'
   icon: LucideIcon
   /** Roles allowed to open the page; omitted means every signed-in user. */
   roles?: readonly Role[]
@@ -43,6 +45,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/customers', labelKey: 'nav.customers', icon: Users, roles: ['Admin', 'Owner'] },
   { path: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['Admin', 'Owner'] },
   { path: '/audit', labelKey: 'nav.audit', icon: History, roles: ['Admin', 'Owner'] },
+  {
+    path: '/subscription',
+    labelKey: 'nav.subscription',
+    icon: BadgeCheck,
+    roles: ['Admin', 'Owner'],
+  },
 ]
 
 /** The app root. It redirects each user to their own start page (see `startPathFor`). */

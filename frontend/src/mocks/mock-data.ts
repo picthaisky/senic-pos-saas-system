@@ -4,6 +4,7 @@ import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
+import type { Subscription } from '@/features/subscription/api'
 import type { MockResult, MockRoute } from './mock-api'
 
 // In-memory stand-in for the contract endpoints the backend does not serve yet
@@ -105,6 +106,22 @@ const loyalty: LoyaltyTransaction[] = [
     createdAt: new Date(Date.now() - 3 * DAY_MS).toISOString(),
   },
 ]
+
+/** Tests replace `current` (null = the shop has none on record). */
+export const mockSubscription: { current: Subscription | null } = {
+  current: {
+    id: uuid(),
+    tenantId: 't1',
+    tenantName: 'ร้านตัวอย่าง',
+    plan: 'Pro',
+    status: 'Active',
+    startDate: new Date(Date.now() - 20 * DAY_MS).toISOString(),
+    endDate: new Date(Date.now() + 10 * DAY_MS + DAY_MS / 2).toISOString(),
+    monthlyFee: 590,
+    autoRenew: false,
+    daysUntilExpiry: 10,
+  },
+}
 
 const orders: Order[] = []
 const ordersByClientId = new Map<string, Order>()
@@ -451,6 +468,36 @@ export const dataRoutes: MockRoute[] = [
     },
   ],
   [
+    'PUT',
+    '/customers/:id',
+    ({ params, body }) => {
+      const customer = customers.find((candidate) => candidate.id === params.id)
+      if (!customer) return notFound
+      // Like the API: a missing field is left alone, an empty string clears it.
+      const changes = body as Partial<
+        Record<'firstName' | 'lastName' | 'email' | 'phone' | 'address', string>
+      >
+      const email = changes.email?.trim().toLowerCase()
+      if (email && customers.some((other) => other !== customer && other.email === email)) {
+        return {
+          status: 409,
+          data: {
+            title: 'Conflict',
+            status: 409,
+            detail: `A customer with email ${email} already exists.`,
+          },
+        }
+      }
+      if (changes.firstName !== undefined) customer.firstName = changes.firstName.trim()
+      if (changes.lastName !== undefined) customer.lastName = changes.lastName.trim()
+      if (email !== undefined) customer.email = email || null
+      if (changes.phone !== undefined) customer.phone = changes.phone.trim() || null
+      if (changes.address !== undefined) customer.address = changes.address.trim() || null
+      customer.fullName = `${customer.firstName} ${customer.lastName}`.trim()
+      return { status: 200, data: { ...customer } }
+    },
+  ],
+  [
     'DELETE',
     '/customers/:id',
     ({ params }) => {
@@ -550,6 +597,13 @@ export const dataRoutes: MockRoute[] = [
       }
       return { status: 200, data: { message: 'Order cancelled successfully' } }
     },
+  ],
+
+  // Subscription
+  [
+    'GET',
+    '/subscriptions/current',
+    () => (mockSubscription.current ? { status: 200, data: mockSubscription.current } : notFound),
   ],
 
   // Dashboard

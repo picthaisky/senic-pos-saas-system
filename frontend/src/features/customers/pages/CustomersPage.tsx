@@ -1,4 +1,4 @@
-import { Download, Eye, Star, Trash2, UserSearch } from 'lucide-react'
+import { Download, Eye, Pencil, Star, Trash2, UserSearch } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -17,6 +17,7 @@ import { formatNumber } from '@/lib/format'
 import { toast } from '@/stores/toast'
 import { useCustomers, useDeleteCustomer } from '../api'
 import { CustomerDetail } from '../components/CustomerDetail'
+import { CustomerEditModal } from '../components/CustomerEditModal'
 import { CustomerForm } from '../components/CustomerForm'
 import type { Customer } from '../types'
 
@@ -26,6 +27,7 @@ export function CustomersPage() {
   const remove = useDeleteCustomer()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Customer | null>(null)
+  const [editing, setEditing] = useState<Customer | null>(null)
 
   // Looked up from the list so the detail panel shows fresh points after each change.
   const selected = customers.data?.find((customer) => customer.id === selectedId) ?? null
@@ -90,6 +92,16 @@ export function CustomersPage() {
           <Button
             variant="ghost"
             size="icon"
+            className="size-8"
+            aria-label={t('customers.editNamed', { name: customer.fullName })}
+            title={t('customers.editCustomer')}
+            onClick={() => setEditing(customer)}
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="size-8 text-danger"
             aria-label={t('customers.deleteNamed', { name: customer.fullName })}
             onClick={() => setDeleting(customer)}
@@ -150,6 +162,10 @@ export function CustomersPage() {
           </Card>
         )}
       </div>
+
+      {editing && (
+        <CustomerEditModal key={editing.id} customer={editing} onClose={() => setEditing(null)} />
+      )}
 
       <ConfirmDialog
         open={!!deleting}
