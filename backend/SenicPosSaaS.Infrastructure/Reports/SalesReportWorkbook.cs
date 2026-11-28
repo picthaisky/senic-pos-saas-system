@@ -39,23 +39,31 @@ public class SalesReportWorkbook : ISalesReportWorkbook
         Line("tax", report.Totals.TaxAmount, Money);
         Line("discounts", report.Totals.Discounts, Money);
         Line("cancelled", report.Totals.CancelledCount, Whole);
+        Line("cost", report.Totals.Cost, Money);
+        Line("profit", report.Totals.GrossProfit, Money);
+        Line("margin", report.Totals.GrossMarginPercent, Money);
+        if (report.Totals.SalesWithoutCost > 0)
+            Line("withoutCost", report.Totals.SalesWithoutCost, Money);
         summary.Cell(row + 1, 1).Value = text["note"];
-        summary.Column(1).Width = 34;
+        summary.Cell(row + 2, 1).Value = text["profitNote"];
+        summary.Column(1).Width = 38;
         summary.Column(2).Width = 24;
 
-        Sheet(workbook, text["byDay"], new[] { text["date"], text["orders"], text["netSales"] }, new[] { 14d, 12, 16 },
+        static XLCellValue OrBlank(decimal? value) => value.HasValue ? value.Value : Blank.Value;
+
+        Sheet(workbook, text["byDay"], new[] { text["date"], text["orders"], text["netSales"] }, new[] { 14d, 12, 16 }, new[] { null, Whole, Money },
             report.ByDay.Select(d => new XLCellValue[] { d.Date, d.OrderCount, d.NetSales }));
 
-        Sheet(workbook, text["byItem"], new[] { text["item"], text["category"], text["quantity"], text["amount"] }, new[] { 40d, 24, 12, 16 },
-            report.ByItem.Select(i => new XLCellValue[] { i.Name, i.Category ?? text["noCategory"], i.Quantity, i.Amount }));
+        Sheet(workbook, text["byItem"], new[] { text["item"], text["category"], text["quantity"], text["amount"], text["cost"], text["profit"] }, new[] { 40d, 24, 12, 16, 16, 16 }, new[] { null, null, Whole, Money, Money, Money },
+            report.ByItem.Select(i => new XLCellValue[] { i.Name, i.Category ?? text["noCategory"], i.Quantity, i.Amount, OrBlank(i.Cost), OrBlank(i.Profit) }));
 
-        Sheet(workbook, text["byCategory"], new[] { text["category"], text["quantity"], text["amount"] }, new[] { 30d, 12, 16 },
-            report.ByCategory.Select(c => new XLCellValue[] { c.Category ?? text["noCategory"], c.Quantity, c.Amount }));
+        Sheet(workbook, text["byCategory"], new[] { text["category"], text["quantity"], text["amount"], text["cost"], text["profit"] }, new[] { 30d, 12, 16, 16, 16 }, new[] { null, Whole, Money, Money, Money },
+            report.ByCategory.Select(c => new XLCellValue[] { c.Category ?? text["noCategory"], c.Quantity, c.Amount, OrBlank(c.Cost), OrBlank(c.Profit) }));
 
-        Sheet(workbook, text["byCashier"], new[] { text["cashier"], text["orders"], text["netSales"] }, new[] { 30d, 12, 16 },
+        Sheet(workbook, text["byCashier"], new[] { text["cashier"], text["orders"], text["netSales"] }, new[] { 30d, 12, 16 }, new[] { null, Whole, Money },
             report.ByCashier.Select(c => new XLCellValue[] { c.Name ?? text["unknownCashier"], c.OrderCount, c.NetSales }));
 
-        Sheet(workbook, text["byPayment"], new[] { text["payment"], text["orders"], text["netSales"] }, new[] { 24d, 12, 16 },
+        Sheet(workbook, text["byPayment"], new[] { text["payment"], text["orders"], text["netSales"] }, new[] { 24d, 12, 16 }, new[] { null, Whole, Money },
             report.ByPaymentMethod.Select(p => new XLCellValue[] { text[p.PaymentMethod.ToString()], p.OrderCount, p.NetSales }));
 
         using var stream = new MemoryStream();
@@ -63,7 +71,8 @@ public class SalesReportWorkbook : ISalesReportWorkbook
         return stream.ToArray();
     }
 
-    private static void Sheet(XLWorkbook workbook, string name, string[] headings, double[] widths, IEnumerable<XLCellValue[]> rows)
+    /// <param name="formats">The number format of each column; null for text.</param>
+    private static void Sheet(XLWorkbook workbook, string name, string[] headings, double[] widths, string?[] formats, IEnumerable<XLCellValue[]> rows)
     {
         var sheet = workbook.AddWorksheet(name);
         for (var column = 0; column < headings.Length; column++)
@@ -71,19 +80,15 @@ public class SalesReportWorkbook : ISalesReportWorkbook
             sheet.Cell(1, column + 1).Value = headings[column];
             sheet.Cell(1, column + 1).Style.Font.Bold = true;
             sheet.Column(column + 1).Width = widths[column];
+            if (formats[column] != null)
+                sheet.Column(column + 1).Style.NumberFormat.Format = formats[column]!;
         }
 
         var row = 2;
         foreach (var values in rows)
         {
             for (var column = 0; column < values.Length; column++)
-            {
-                var cell = sheet.Cell(row, column + 1);
-                cell.Value = values[column];
-                // Whole numbers are counts; the others are baht.
-                if (values[column].IsNumber)
-                    cell.Style.NumberFormat.Format = values[column].GetNumber() % 1 == 0 && column < values.Length - 1 ? Whole : Money;
-            }
+                sheet.Cell(row, column + 1).Value = values[column];
             row++;
         }
         sheet.SheetView.FreezeRows(1);
@@ -100,6 +105,11 @@ public class SalesReportWorkbook : ISalesReportWorkbook
         ["tax"] = "ภาษีมูลค่าเพิ่ม",
         ["discounts"] = "ส่วนลดรวม",
         ["cancelled"] = "บิลที่ยกเลิก",
+        ["cost"] = "ต้นทุนสินค้าที่ขาย",
+        ["profit"] = "กำไรขั้นต้น",
+        ["margin"] = "อัตรากำไรขั้นต้น (%)",
+        ["withoutCost"] = "ยอดขายที่ไม่มีต้นทุนบันทึกไว้",
+        ["profitNote"] = "กำไรขั้นต้น = ยอดขายไม่รวม VAT หลังหักส่วนลดทุกชนิด ลบต้นทุนของสินค้า ณ เวลาที่ขาย คิดเฉพาะรายการที่มีต้นทุนบันทึกไว้",
         ["note"] = "นับเฉพาะบิลที่ขายสำเร็จ ยอดตามสินค้าและหมวดหมู่เป็นยอดหลังส่วนลดรายสินค้า ก่อนส่วนลดท้ายบิลและแต้ม",
         ["byDay"] = "ตามวัน",
         ["byItem"] = "ตามสินค้า",
@@ -133,6 +143,11 @@ public class SalesReportWorkbook : ISalesReportWorkbook
         ["tax"] = "VAT",
         ["discounts"] = "Discounts",
         ["cancelled"] = "Cancelled bills",
+        ["cost"] = "Cost of goods sold",
+        ["profit"] = "Gross profit",
+        ["margin"] = "Gross margin (%)",
+        ["withoutCost"] = "Sales without a recorded cost",
+        ["profitNote"] = "Gross profit = sales without VAT and after every discount, less the cost of the goods when they were sold. Only lines with a recorded cost count.",
         ["note"] = "Completed bills only. Amounts by item and category are after line discounts, before bill discounts and points.",
         ["byDay"] = "By day",
         ["byItem"] = "By item",

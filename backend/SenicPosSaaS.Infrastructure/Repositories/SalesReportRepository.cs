@@ -71,9 +71,23 @@ public class SalesReportRepository : ISalesReportRepository
     {
         var rows = await SoldLines(tenantId, fromUtc, toUtc)
             .GroupBy(oi => new { oi.InventoryItemId, oi.InventoryItem!.Name, oi.InventoryItem.Category })
-            .Select(g => new { g.Key.InventoryItemId, g.Key.Name, g.Key.Category, Quantity = g.Sum(oi => oi.Quantity), Amount = g.Sum(oi => oi.Subtotal) })
+            .Select(g => new
+            {
+                g.Key.InventoryItemId,
+                g.Key.Name,
+                g.Key.Category,
+                Quantity = g.Sum(oi => oi.Quantity),
+                Amount = g.Sum(oi => oi.Subtotal),
+                // A line's share of what its bill earned without VAT: (net - tax) is the bill after
+                // every discount, and the lines share it by their amounts.
+                CostedRevenue = g.Sum(oi => oi.UnitCost == null || oi.Order!.TotalAmount == 0
+                    ? 0
+                    : oi.Subtotal * (oi.Order.NetAmount - oi.Order.TaxAmount) / oi.Order.TotalAmount),
+                Cost = g.Sum(oi => oi.UnitCost == null ? 0 : oi.UnitCost.Value * oi.Quantity),
+                CostedQuantity = g.Sum(oi => oi.UnitCost == null ? 0 : oi.Quantity)
+            })
             .ToListAsync(cancellationToken);
-        return rows.Select(r => new ItemSales(r.InventoryItemId, r.Name, r.Category, r.Quantity, r.Amount)).ToList();
+        return rows.Select(r => new ItemSales(r.InventoryItemId, r.Name, r.Category, r.Quantity, r.Amount, r.CostedRevenue, r.Cost, r.CostedQuantity)).ToList();
     }
 
     public async Task<IReadOnlyList<CashierSales>> ByCashierAsync(Guid tenantId, DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)

@@ -33,6 +33,21 @@ public class SalesReportTotalsDto
     public decimal AverageOrderValue { get; set; }
     /// <summary>Cancelled bills of the period; they are in none of the other figures.</summary>
     public int CancelledCount { get; set; }
+
+    /// <summary>What the goods sold cost the shop, for the lines whose cost was recorded.</summary>
+    public decimal Cost { get; set; }
+    /// <summary>
+    /// Sales without VAT and after every discount, less <see cref="Cost"/>; only over the lines
+    /// whose cost was recorded.
+    /// </summary>
+    public decimal GrossProfit { get; set; }
+    /// <summary><see cref="GrossProfit"/> as a percentage of the sales it is worked out on; 0 without such sales.</summary>
+    public decimal GrossMarginPercent { get; set; }
+    /// <summary>
+    /// Sales (without VAT) of lines sold before costs were recorded. They are in neither
+    /// <see cref="Cost"/> nor <see cref="GrossProfit"/>; above 0, the profit covers only part of the period.
+    /// </summary>
+    public decimal SalesWithoutCost { get; set; }
 }
 
 public class SalesByDayDto
@@ -49,6 +64,10 @@ public class SalesByItemDto
     public string? Category { get; set; }
     public int Quantity { get; set; }
     public decimal Amount { get; set; }
+    /// <summary>Null when no unit of the item was sold with a recorded cost.</summary>
+    public decimal? Cost { get; set; }
+    /// <summary>The item's share of the bills without VAT and after every discount, less its cost. Null like <see cref="Cost"/>.</summary>
+    public decimal? Profit { get; set; }
 }
 
 public class SalesByCategoryDto
@@ -57,6 +76,8 @@ public class SalesByCategoryDto
     public string? Category { get; set; }
     public int Quantity { get; set; }
     public decimal Amount { get; set; }
+    public decimal? Cost { get; set; }
+    public decimal? Profit { get; set; }
 }
 
 public class SalesByCashierDto

@@ -41,6 +41,13 @@ describe('reports page', () => {
     )
     // The seeded shop charges no VAT, so there is no tax to show.
     expect(totals().queryByText(t('reports.tax'))).not.toBeInTheDocument()
+    expect(report.totals.grossProfit).toBeGreaterThan(0)
+    expect(totals().getByText(t('reports.grossProfit')).nextElementSibling).toHaveTextContent(
+      formatCurrency(report.totals.grossProfit),
+    )
+    // Every bill of the mock has a cost, so nothing is left out of the profit.
+    expect(screen.getByText(t('reports.profitNote'))).toBeInTheDocument()
+    expect(screen.queryByText(/ก่อนระบบเริ่มเก็บต้นทุน/)).not.toBeInTheDocument()
 
     const table = within(screen.getByRole('table', { name: t('reports.views.byDay') }))
     // One row per day, days without sales included, and the heading row.
@@ -58,6 +65,7 @@ describe('reports page', () => {
     const bestRow = within(items.getByText(best.name).closest('tr')!)
     expect(bestRow.getByText(formatCurrency(best.amount))).toBeInTheDocument()
     expect(bestRow.getByText(formatNumber(best.quantity))).toBeInTheDocument()
+    expect(bestRow.getByText(formatCurrency(best.profit!))).toBeInTheDocument()
     // Best seller first.
     expect(items.getAllByRole('row')[1]).toHaveTextContent(best.name)
 

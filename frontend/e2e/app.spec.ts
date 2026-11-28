@@ -361,6 +361,13 @@ test('opens the sales report and downloads it as a spreadsheet', async ({ page }
       .getByText(/สินค้า E2E/)
       .first(),
   ).toBeVisible()
+  // Every bill of this run was sold with its cost on it, so the profit covers them all.
+  await expect(totals.getByText('กำไรขั้นต้น')).toBeVisible()
+  await expect(page.getByText(/ก่อนระบบเริ่มเก็บต้นทุน/)).toHaveCount(0)
+  await expect(
+    page.getByRole('table', { name: 'ตามสินค้า' }).getByRole('columnheader', { name: 'ต้นทุน' }),
+  ).toBeVisible()
+  await shot(page, '16a-reports-items')
   await page.getByRole('button', { name: 'ตามพนักงาน' }).click()
   // Every bill of this run was sold by the signed-in owner, so nobody is "not recorded".
   const cashiers = page.getByRole('table', { name: 'ตามพนักงาน' })

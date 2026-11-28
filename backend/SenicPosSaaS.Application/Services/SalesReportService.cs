@@ -42,6 +42,11 @@ public class SalesReportService : ISalesReportService
         var byCashier = await _reports.ByCashierAsync(tenantId, fromUtc, toUtc, cancellationToken);
         var byPayment = await _reports.ByPaymentMethodAsync(tenantId, fromUtc, toUtc, cancellationToken);
 
+        // Profit is worked out only where the cost is known; the rest is reported beside it.
+        var cost = byItem.Sum(i => i.Cost);
+        var costedRevenue = byItem.Sum(i => i.CostedRevenue);
+        var salesWithoutCost = totals.NetSales - totals.TaxAmount - costedRevenue;
+
         var report = new SalesReportDto
         {
             From = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -53,15 +58,36 @@ public class SalesReportService : ISalesReportService
                 TaxAmount = totals.TaxAmount,
                 Discounts = totals.Discounts,
                 AverageOrderValue = totals.OrderCount == 0 ? 0 : OrderPricing.Round(totals.NetSales / totals.OrderCount),
-                CancelledCount = totals.CancelledCount
+                CancelledCount = totals.CancelledCount,
+                Cost = OrderPricing.Round(cost),
+                GrossProfit = OrderPricing.Round(costedRevenue - cost),
+                GrossMarginPercent = costedRevenue <= 0 ? 0 : OrderPricing.Round((costedRevenue - cost) / costedRevenue * 100),
+                // Below a satang it is only the rounding of the shares.
+                SalesWithoutCost = salesWithoutCost < 0.005m ? 0 : OrderPricing.Round(salesWithoutCost)
             },
             ByItem = byItem
                 .OrderByDescending(i => i.Amount).ThenBy(i => i.Name)
-                .Select(i => new SalesByItemDto { InventoryItemId = i.InventoryItemId, Name = i.Name, Category = NullIfBlank(i.Category), Quantity = i.Quantity, Amount = i.Amount })
+                .Select(i => new SalesByItemDto
+                {
+                    InventoryItemId = i.InventoryItemId,
+                    Name = i.Name,
+                    Category = NullIfBlank(i.Category),
+                    Quantity = i.Quantity,
+                    Amount = i.Amount,
+                    Cost = i.CostedQuantity == 0 ? null : OrderPricing.Round(i.Cost),
+                    Profit = i.CostedQuantity == 0 ? null : OrderPricing.Round(i.CostedRevenue - i.Cost)
+                })
                 .ToList(),
             ByCategory = byItem
                 .GroupBy(i => NullIfBlank(i.Category))
-                .Select(g => new SalesByCategoryDto { Category = g.Key, Quantity = g.Sum(i => i.Quantity), Amount = g.Sum(i => i.Amount) })
+                .Select(g => new SalesByCategoryDto
+                {
+                    Category = g.Key,
+                    Quantity = g.Sum(i => i.Quantity),
+                    Amount = g.Sum(i => i.Amount),
+                    Cost = g.Sum(i => i.CostedQuantity) == 0 ? null : OrderPricing.Round(g.Sum(i => i.Cost)),
+                    Profit = g.Sum(i => i.CostedQuantity) == 0 ? null : OrderPricing.Round(g.Sum(i => i.CostedRevenue - i.Cost))
+                })
                 .OrderByDescending(c => c.Amount).ThenBy(c => c.Category)
                 .ToList(),
             ByCashier = byCashier

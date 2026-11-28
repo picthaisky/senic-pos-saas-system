@@ -304,6 +304,8 @@ function salesReport(from: string, to: string): SalesReport {
   const byCashier = new Map<string, SalesReport['byCashier'][number]>()
   const byPayment = new Map<string, SalesReport['byPaymentMethod'][number]>()
   const totals = { orderCount: 0, netSales: 0, taxAmount: 0, discounts: 0, cancelledCount: 0 }
+  // The mock keeps no cost on a bill: it uses what the item costs now.
+  const revenue = new Map<string, number>()
 
   for (const order of orders) {
     const day = byDay.get(localDate(new Date(order.createdAt)))
@@ -349,11 +351,29 @@ function salesReport(from: string, to: string): SalesReport {
         category: items.find((item) => item.id === line.inventoryItemId)?.category ?? null,
         quantity: 0,
         amount: 0,
+        cost: 0,
+        profit: 0,
       }
       entry.quantity += line.quantity
       entry.amount = round2(entry.amount + line.subtotal)
+      const unitCost = items.find((item) => item.id === line.inventoryItemId)?.cost ?? 0
+      entry.cost = round2((entry.cost ?? 0) + unitCost * line.quantity)
+      // The line's share of what the bill earned without VAT, after every discount.
+      const share = order.totalAmount
+        ? (line.subtotal * (order.netAmount - order.taxAmount)) / order.totalAmount
+        : 0
+      revenue.set(line.inventoryItemId, (revenue.get(line.inventoryItemId) ?? 0) + share)
       byItem.set(line.inventoryItemId, entry)
     }
+  }
+
+  let cost = 0
+  let costedRevenue = 0
+  for (const item of byItem.values()) {
+    const earned = revenue.get(item.inventoryItemId) ?? 0
+    item.profit = round2(earned - (item.cost ?? 0))
+    cost += item.cost ?? 0
+    costedRevenue += earned
   }
 
   const byCategory = new Map<string, SalesReport['byCategory'][number]>()
@@ -362,9 +382,13 @@ function salesReport(from: string, to: string): SalesReport {
       category: item.category,
       quantity: 0,
       amount: 0,
+      cost: 0,
+      profit: 0,
     }
     entry.quantity += item.quantity
     entry.amount = round2(entry.amount + item.amount)
+    entry.cost = round2((entry.cost ?? 0) + (item.cost ?? 0))
+    entry.profit = round2((entry.profit ?? 0) + (item.profit ?? 0))
     byCategory.set(item.category ?? '', entry)
   }
 
@@ -374,6 +398,12 @@ function salesReport(from: string, to: string): SalesReport {
     totals: {
       ...totals,
       averageOrderValue: totals.orderCount ? round2(totals.netSales / totals.orderCount) : 0,
+      cost: round2(cost),
+      grossProfit: round2(costedRevenue - cost),
+      grossMarginPercent: costedRevenue
+        ? round2(((costedRevenue - cost) / costedRevenue) * 100)
+        : 0,
+      salesWithoutCost: 0,
     },
     byDay: [...byDay].map(([date, value]) => ({ date, ...value })),
     byItem: [...byItem.values()].sort((a, b) => b.amount - a.amount),

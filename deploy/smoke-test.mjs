@@ -230,8 +230,8 @@ if (!credentials) {
 
     const sold = await call('GET', '/api/reports/sales')
     check(
-      'the sales report adds up the bills and names who sold them',
-      sold.status === 200 && sold.json?.totals?.orderCount >= 2 && sold.json.byItem?.length > 0 && sold.json.byCashier?.some((c) => c.name && c.orderCount >= 2),
+      'the sales report adds up the bills, names who sold them and works out the profit',
+      sold.status === 200 && sold.json?.totals?.orderCount >= 2 && sold.json.byItem?.length > 0 && sold.json.byCashier?.some((c) => c.name && c.orderCount >= 2) && sold.json.totals.cost > 0 && sold.json.totals.salesWithoutCost === 0 && sold.json.byItem.every((i) => i.profit !== null),
       `status ${sold.status}, bills ${sold.json?.totals?.orderCount}`,
     )
 

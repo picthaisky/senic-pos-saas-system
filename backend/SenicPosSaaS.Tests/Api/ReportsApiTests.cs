@@ -109,6 +109,23 @@ public class ReportsApiTests : IClassFixture<ApiFactory>
             (PaymentMethod.Cash, 2, 205m),
             (PaymentMethod.QRCode, 1, 200m));
 
+        // Profit: sales without VAT and after every discount, less what the goods cost (half
+        // their price here). 405 - 26.49 of VAT = 378.51; cost 100 + 50 + 60 + 7.50 = 217.50.
+        report.Totals.Cost.Should().Be(217.50m);
+        report.Totals.GrossProfit.Should().Be(161.01m);
+        report.Totals.GrossMarginPercent.Should().Be(42.54m);
+        report.Totals.SalesWithoutCost.Should().Be(0);
+        // The 20 baht off the second bill is shared by its lines: tea earns 100/220 of 186.92.
+        report.ByItem.Select(i => (i.Name, i.Cost, i.Profit)).Should().Equal(
+            ("Report tea", 150m, 112.53m),
+            ("Report cake", 60m, 41.96m),
+            ("Report bag", 7.50m, 6.52m));
+        report.ByItem.Sum(i => i.Profit).Should().Be(report.Totals.GrossProfit);
+        report.ByCategory.Select(c => (c.Category, c.Cost, c.Profit)).Should().Equal(
+            ("Drinks", 150m, 112.53m),
+            ("Bakery", 60m, 41.96m),
+            ((string?)null, 7.50m, 6.52m));
+
         // Today alone leaves yesterday's bill out.
         var today = await ReadAsync<SalesReportDto>(await owner.GetAsync($"/api/reports/sales?from={Iso(Today)}&to={Iso(Today)}"));
         today.Totals.NetSales.Should().Be(215);
@@ -133,6 +150,32 @@ public class ReportsApiTests : IClassFixture<ApiFactory>
         var thai = await owner.GetAsync($"/api/reports/sales.xlsx?from={Iso(Today)}&to={Iso(Today)}");
         using var thaiWorkbook = new XLWorkbook(new MemoryStream(await thai.Content.ReadAsByteArrayAsync()));
         thaiWorkbook.Worksheets.First().Name.Should().Be("สรุป");
+
+        items.Cell(1, 5).GetString().Should().Be("Cost of goods sold");
+        items.Cell(2, 5).GetValue<decimal>().Should().Be(150);
+        items.Cell(2, 6).GetValue<decimal>().Should().Be(112.53m);
+        workbook.Worksheet("Summary").Cell(11, 1).GetString().Should().Be("Gross profit");
+        workbook.Worksheet("Summary").Cell(11, 2).GetValue<decimal>().Should().Be(161.01m);
+
+        // A line sold before costs were kept has none: it is left out of the profit, and the
+        // report says how much was sold that way.
+        await _factory.WithDbAsync(async db =>
+        {
+            var line = await db.OrderItems.IgnoreQueryFilters().SingleAsync(oi => oi.InventoryItemId == bag.Id);
+            line.UnitCost = null;
+            await db.SaveChangesAsync();
+        });
+        var partly = await ReadAsync<SalesReportDto>(await owner.GetAsync($"/api/reports/sales?from={Iso(yesterday)}&to={Iso(Today)}"));
+        partly.Totals.SalesWithoutCost.Should().Be(14.02m, "15 baht of bags less 0.98 of VAT");
+        partly.Totals.Cost.Should().Be(210);
+        partly.Totals.GrossProfit.Should().Be(154.49m);
+        partly.ByItem.Single(i => i.Name == "Report bag").Cost.Should().BeNull();
+        partly.ByItem.Single(i => i.Name == "Report bag").Profit.Should().BeNull();
+        partly.ByCategory.Single(c => c.Category == null).Profit.Should().BeNull();
+        var partlyFile = await owner.GetAsync($"/api/reports/sales.xlsx?from={Iso(yesterday)}&to={Iso(Today)}&lang=en");
+        using var partlyWorkbook = new XLWorkbook(new MemoryStream(await partlyFile.Content.ReadAsByteArrayAsync()));
+        partlyWorkbook.Worksheet("By item").Cell(4, 5).IsEmpty().Should().BeTrue();
+        partlyWorkbook.Worksheet("Summary").Cell(13, 1).GetString().Should().Be("Sales without a recorded cost");
     }
 
     [Fact]

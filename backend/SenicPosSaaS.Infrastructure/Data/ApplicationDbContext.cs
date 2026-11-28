@@ -161,6 +161,7 @@ public class ApplicationDbContext : DbContext
         // Configure OrderItem entity
         modelBuilder.Entity<OrderItem>(entity =>
         {
+            entity.Property(e => e.UnitCost).HasPrecision(18, 2);
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
             entity.Property(e => e.Discount).HasPrecision(18, 2);

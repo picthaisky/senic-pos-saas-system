@@ -146,6 +146,7 @@ public class OrderService : IOrderService
                 InventoryItem = inventoryItem,
                 Quantity = itemDto.Quantity,
                 UnitPrice = inventoryItem.Price,
+                UnitCost = inventoryItem.Cost,
                 Discount = itemDto.Discount,
                 Subtotal = subtotal,
                 CreatedAt = now

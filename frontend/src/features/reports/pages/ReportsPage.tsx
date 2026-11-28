@@ -10,6 +10,7 @@ import {
   Input,
   PageHeader,
 } from '@/components/ui'
+import { SalesChart } from '@/features/dashboard/components/SalesChart'
 import { cn } from '@/lib/cn'
 import { saveFile } from '@/lib/export-csv'
 import { formatCurrency, formatDay, formatNumber, toIsoDate } from '@/lib/format'
@@ -29,6 +30,9 @@ function daysAgo(days: number): string {
 }
 
 const money = (value: number) => <span className="tabular-nums">{formatCurrency(value)}</span>
+/** A dash where the cost was not recorded, so no profit can be worked out. */
+const moneyOrDash = (value: number | null) =>
+  value === null ? <span className="text-muted">–</span> : money(value)
 const count = (value: number) => <span className="tabular-nums">{formatNumber(value)}</span>
 
 export function ReportsPage() {
@@ -59,12 +63,17 @@ export function ReportsPage() {
     }
   }
 
-  const tiles: { label: string; value: string }[] = data
+  const tiles: { label: string; value: string; hint?: string }[] = data
     ? [
         { label: t('reports.netSales'), value: formatCurrency(data.totals.netSales) },
         { label: t('reports.orders'), value: formatNumber(data.totals.orderCount) },
         { label: t('reports.average'), value: formatCurrency(data.totals.averageOrderValue) },
         { label: t('reports.discounts'), value: formatCurrency(data.totals.discounts) },
+        {
+          label: t('reports.grossProfit'),
+          value: formatCurrency(data.totals.grossProfit),
+          hint: t('reports.margin', { percent: formatNumber(data.totals.grossMarginPercent) }),
+        },
         // A shop without VAT has no tax to show.
         ...(data.totals.taxAmount > 0
           ? [{ label: t('reports.tax'), value: formatCurrency(data.totals.taxAmount) }]
@@ -122,11 +131,14 @@ export function ReportsPage() {
           <>
             {data && (
               <section aria-label={t('reports.totals')}>
-                <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
                   {tiles.map((tile) => (
                     <div key={tile.label} className="rounded-lg border border-border px-4 py-3">
                       <dt className="text-sm text-muted">{tile.label}</dt>
                       <dd className="mt-1 text-lg font-semibold tabular-nums">{tile.value}</dd>
+                      {tile.hint && (
+                        <dd className="text-xs text-muted tabular-nums">{tile.hint}</dd>
+                      )}
                     </div>
                   ))}
                 </dl>
@@ -154,6 +166,14 @@ export function ReportsPage() {
 
             <ReportTable view={view} report={data} loading={report.isLoading} />
             <p className="mt-3 text-sm text-muted">{t('reports.note')}</p>
+            <p className="mt-1 text-sm text-muted">{t('reports.profitNote')}</p>
+            {data && data.totals.salesWithoutCost > 0 && (
+              <p className="mt-2 rounded-lg bg-warning/15 px-3 py-2 text-sm">
+                {t('reports.withoutCost', {
+                  amount: formatCurrency(data.totals.salesWithoutCost),
+                })}
+              </p>
+            )}
           </>
         )}
       </Card>
@@ -207,6 +227,18 @@ function ReportTable({ view, report, loading }: ReportTableProps) {
     const { rows, more } = cut(report ? [...report.byDay].reverse() : undefined)
     return (
       <>
+        {report && report.byDay.length > 1 && (
+          <div className="mb-4">
+            <SalesChart
+              withTable={false}
+              data={report.byDay.map((row) => ({
+                date: row.date,
+                total: row.netSales,
+                orderCount: row.orderCount,
+              }))}
+            />
+          </div>
+        )}
         <DataTable
           caption={caption}
           columns={columns}
@@ -246,6 +278,18 @@ function ReportTable({ view, report, loading }: ReportTableProps) {
         align: 'right',
         cell: (row) => money(row.amount),
       },
+      {
+        key: 'cost',
+        header: t('reports.cost'),
+        align: 'right',
+        cell: (row) => moneyOrDash(row.cost),
+      },
+      {
+        key: 'profit',
+        header: t('reports.grossProfit'),
+        align: 'right',
+        cell: (row) => moneyOrDash(row.profit),
+      },
     ]
     const { rows, more } = cut(report?.byItem)
     return (
@@ -283,6 +327,18 @@ function ReportTable({ view, report, loading }: ReportTableProps) {
         header: t('reports.amount'),
         align: 'right',
         cell: (row) => money(row.amount),
+      },
+      {
+        key: 'cost',
+        header: t('reports.cost'),
+        align: 'right',
+        cell: (row) => moneyOrDash(row.cost),
+      },
+      {
+        key: 'profit',
+        header: t('reports.grossProfit'),
+        align: 'right',
+        cell: (row) => moneyOrDash(row.profit),
       },
     ]
     const { rows, more } = cut(report?.byCategory)

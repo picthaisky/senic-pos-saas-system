@@ -16,6 +16,13 @@ export interface SalesReport {
     discounts: number
     averageOrderValue: number
     cancelledCount: number
+    /** What the goods sold cost the shop, for the lines whose cost was recorded. */
+    cost: number
+    /** Sales without VAT and after every discount, less `cost`; only over those lines. */
+    grossProfit: number
+    grossMarginPercent: number
+    /** Sales of lines sold before costs were recorded: in neither `cost` nor `grossProfit`. */
+    salesWithoutCost: number
   }
   /** One entry per day of the period, days without sales included. */
   byDay: { date: string; orderCount: number; netSales: number }[]
@@ -26,8 +33,17 @@ export interface SalesReport {
     category: string | null
     quantity: number
     amount: number
+    /** Null when no unit was sold with a recorded cost. */
+    cost: number | null
+    profit: number | null
   }[]
-  byCategory: { category: string | null; quantity: number; amount: number }[]
+  byCategory: {
+    category: string | null
+    quantity: number
+    amount: number
+    cost: number | null
+    profit: number | null
+  }[]
   /** `name` is null for bills made before the seller was recorded. */
   byCashier: { userId: string | null; name: string | null; orderCount: number; netSales: number }[]
   byPaymentMethod: { paymentMethod: PaymentMethod; orderCount: number; netSales: number }[]
