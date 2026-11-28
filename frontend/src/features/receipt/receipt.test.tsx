@@ -33,6 +33,8 @@ const order: Order = {
   vatMode: 'Inclusive',
   vatRatePercent: 7,
   pointsEarned: 13,
+  pointsRedeemed: 0,
+  pointsDiscount: 0,
   status: 'Completed',
   paymentMethod: 'Cash',
   createdAt: '2026-11-28T03:15:00Z',
@@ -131,6 +133,11 @@ describe('receipt', () => {
   it('is in Thai even when the screen is in English, and leaves out what the shop has not filled in', async () => {
     await i18n.changeLanguage('en')
     try {
+      const withPoints: Order = { ...order, pointsRedeemed: 40, pointsDiscount: 20 }
+      const used = render(<Receipt order={withPoints} shop={shop} />)
+      expect(used.getByText('ส่วนลดจากแต้ม (40 แต้ม)').closest('div')).toHaveTextContent('-20.00')
+      used.unmount()
+
       const walkIn: Order = { ...order, customerId: null, customerName: '', pointsEarned: 0 }
       const { container } = render(<Receipt order={walkIn} shop={DEFAULT_SHOP_SETTINGS} />)
 

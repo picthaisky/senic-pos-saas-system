@@ -20,6 +20,8 @@ interface CartState {
   paymentMethod: PaymentMethod
   /** Off the whole bill, after the line discounts. */
   billDiscount: BillDiscount
+  /** Points of the chosen customer to use as a discount; back to 0 when the customer changes. */
+  pointsToRedeem: number
   /** Idempotency key for the order this cart becomes; renewed whenever the cart is cleared. */
   clientOrderId: string
   /** Adds one unit. Returns false when the item is already at its stock limit. */
@@ -29,6 +31,7 @@ interface CartState {
   removeItem: (inventoryItemId: string) => void
   setLineDiscount: (inventoryItemId: string, discount: number) => void
   setBillDiscount: (discount: BillDiscount) => void
+  setPointsToRedeem: (points: number) => void
   setCustomer: (customerId: string | null) => void
   setPaymentMethod: (method: PaymentMethod) => void
   clear: () => void
@@ -39,6 +42,7 @@ const emptyCart = () => ({
   customerId: null,
   paymentMethod: 'Cash' as PaymentMethod,
   billDiscount: { kind: 'amount', value: 0 } as BillDiscount,
+  pointsToRedeem: 0,
   clientOrderId: crypto.randomUUID(),
 })
 
@@ -95,7 +99,11 @@ export const useCartStore = create<CartState>((set, get) => ({
       },
     }),
 
-  setCustomer: (customerId) => set({ customerId }),
+  setPointsToRedeem: (points) =>
+    set({ pointsToRedeem: Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0 }),
+
+  // The points belong to the customer: another customer starts from none.
+  setCustomer: (customerId) => set({ customerId, pointsToRedeem: 0 }),
   setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
   clear: () => set(emptyCart()),
 }))
@@ -104,9 +112,14 @@ export const useCartStore = create<CartState>((set, get) => ({
  * What the till shows before the sale. The amounts on the saved bill come from the backend,
  * which does the same arithmetic (features/shop/pricing.ts).
  */
-export function cartTotals(lines: CartLine[], billDiscount: BillDiscount, vat: VatSettings) {
+export function cartTotals(
+  lines: CartLine[],
+  billDiscount: BillDiscount,
+  vat: VatSettings,
+  pointsDiscount = 0,
+) {
   return {
     itemCount: lines.reduce((sum, line) => sum + line.quantity, 0),
-    ...billTotals(lines, billDiscount, vat),
+    ...billTotals(lines, billDiscount, vat, pointsDiscount),
   }
 }

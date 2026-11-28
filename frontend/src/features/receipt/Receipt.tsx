@@ -91,6 +91,12 @@ export function Receipt({ order, shop }: ReceiptProps) {
             <dd>-{money.format(order.discountAmount)}</dd>
           </div>
         )}
+        {order.pointsRedeemed > 0 && (
+          <div>
+            <dt>{t('receipt.pointsDiscount', { points: order.pointsRedeemed })}</dt>
+            <dd>-{money.format(order.pointsDiscount)}</dd>
+          </div>
+        )}
         {order.vatMode === 'Exclusive' && (
           <div>
             <dt>{t('receipt.vatAdded', { rate: order.vatRatePercent })}</dt>
@@ -111,10 +117,10 @@ export function Receipt({ order, shop }: ReceiptProps) {
           <dt>{t('receipt.paidBy')}</dt>
           <dd>{t(`payment.${order.paymentMethod}`)}</dd>
         </div>
-        {lineDiscounts + order.discountAmount > 0 && (
+        {lineDiscounts + order.discountAmount + order.pointsDiscount > 0 && (
           <div>
             <dt>{t('receipt.saved')}</dt>
-            <dd>{money.format(lineDiscounts + order.discountAmount)}</dd>
+            <dd>{money.format(lineDiscounts + order.discountAmount + order.pointsDiscount)}</dd>
           </div>
         )}
         {order.pointsEarned > 0 && (

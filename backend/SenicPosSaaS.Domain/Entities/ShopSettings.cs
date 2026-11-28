@@ -32,6 +32,12 @@ public class ShopSettings : TenantEntity
     /// </summary>
     public decimal BahtPerPoint { get; set; }
 
+    /// <summary>
+    /// What one point is worth, in baht, when a customer uses points as a discount on a bill.
+    /// 0 switches paying with points off.
+    /// </summary>
+    public decimal PointValueBaht { get; set; }
+
     /// <summary>A line printed at the bottom of receipts.</summary>
     public string? ReceiptFooter { get; set; }
 }

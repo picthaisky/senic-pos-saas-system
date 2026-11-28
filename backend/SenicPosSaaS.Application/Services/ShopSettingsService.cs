@@ -44,6 +44,7 @@ public class ShopSettingsService : IShopSettingsService
         settings.VatMode = dto.VatMode;
         settings.VatRatePercent = dto.VatRatePercent;
         settings.BahtPerPoint = dto.BahtPerPoint;
+        settings.PointValueBaht = dto.PointValueBaht;
         settings.ReceiptFooter = NullIfBlank(dto.ReceiptFooter);
 
         if (isNew)
@@ -76,6 +77,7 @@ public class ShopSettingsService : IShopSettingsService
         VatMode = settings.VatMode,
         VatRatePercent = settings.VatRatePercent,
         BahtPerPoint = settings.BahtPerPoint,
+        PointValueBaht = settings.PointValueBaht,
         ReceiptFooter = settings.ReceiptFooter
     };
 }

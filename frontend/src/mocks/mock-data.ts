@@ -5,7 +5,7 @@ import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
 import { DEFAULT_SHOP_SETTINGS, type ShopSettings } from '@/features/shop/api'
-import { billTotals, lineSubtotal, pointsFor } from '@/features/shop/pricing'
+import { billTotals, lineSubtotal, pointsDiscountOf, pointsFor } from '@/features/shop/pricing'
 import type { Subscription } from '@/features/subscription/api'
 import type { MockResult, MockRoute } from './mock-api'
 
@@ -197,8 +197,14 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
     }
   })
   const shop = mockShopSettings.current
-  const totals = billTotals(lines, { kind: 'amount', value: request.discountAmount }, shop)
   const customer = customers.find((candidate) => candidate.id === request.customerId)
+  const pointsRedeemed = customer ? (request.pointsRedeemed ?? 0) : 0
+  const totals = billTotals(
+    lines,
+    { kind: 'amount', value: request.discountAmount },
+    shop,
+    pointsDiscountOf(pointsRedeemed, shop.pointValueBaht),
+  )
   return {
     id: uuid(),
     orderNumber: `ORD-${String(orderSequence++).padStart(5, '0')}`,
@@ -211,6 +217,8 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
     vatMode: shop.vatMode,
     vatRatePercent: shop.vatMode === 'None' ? 0 : shop.vatRatePercent,
     pointsEarned: customer ? pointsFor(totals.total, shop.bahtPerPoint) : 0,
+    pointsRedeemed,
+    pointsDiscount: totals.pointsDiscount,
     status: 'Completed',
     paymentMethod: request.paymentMethod,
     createdAt: createdAt.toISOString(),
@@ -280,16 +288,21 @@ function changePoints(
   return { status: 200, data: { ...customer } }
 }
 
-/** The points a bill gives its customer, or takes back when it is cancelled. */
-function movePoints(order: Order, type: 'Earned' | 'Reversed') {
+/**
+ * The points a bill moves: used (Redeemed) and given (Earned) when it is sold, given back
+ * (Returned) and taken back (Reversed) when it is cancelled.
+ */
+function movePoints(order: Order, type: LoyaltyTransaction['type']) {
   const customer = customers.find((candidate) => candidate.id === order.customerId)
-  if (!customer || order.pointsEarned === 0) return
-  customer.loyaltyPoints += type === 'Earned' ? order.pointsEarned : -order.pointsEarned
+  const points =
+    type === 'Earned' || type === 'Reversed' ? order.pointsEarned : order.pointsRedeemed
+  if (!customer || points === 0) return
+  customer.loyaltyPoints += type === 'Earned' || type === 'Returned' ? points : -points
   loyalty.push({
     id: uuid(),
     customerId: customer.id,
     type,
-    points: order.pointsEarned,
+    points,
     orderId: order.id,
     description: order.orderNumber,
     createdAt: new Date().toISOString(),
@@ -670,7 +683,41 @@ export const dataRoutes: MockRoute[] = [
         }
       }
 
+      // Like the API: points need a customer who has them and a shop that takes them, and
+      // must leave something to pay.
+      const asked = request.pointsRedeemed ?? 0
+      if (asked > 0) {
+        const customer = customers.find((candidate) => candidate.id === request.customerId)
+        if (!customer || mockShopSettings.current.pointValueBaht <= 0) {
+          return {
+            status: 400,
+            data: {
+              title: 'Bad Request',
+              status: 400,
+              detail: 'Points cannot be used on this bill.',
+            },
+          }
+        }
+        if (asked > customer.loyaltyPoints) {
+          return {
+            status: 409,
+            data: { title: 'Conflict', status: 409, detail: 'Not enough points' },
+          }
+        }
+      }
+
       const order = buildOrder(request, new Date())
+      if (asked > 0 && order.totalAmount - order.discountAmount - order.pointsDiscount <= 0) {
+        return {
+          status: 400,
+          data: {
+            title: 'Bad Request',
+            status: 400,
+            detail: 'The points must leave something to pay.',
+          },
+        }
+      }
+      movePoints(order, 'Redeemed')
       movePoints(order, 'Earned')
       for (const line of request.items) {
         items.find((candidate) => candidate.id === line.inventoryItemId)!.quantity -= line.quantity
@@ -720,6 +767,7 @@ export const dataRoutes: MockRoute[] = [
       // Like the API: cancelling twice does not put the stock back twice.
       if (order.status !== 'Cancelled') {
         order.status = 'Cancelled'
+        movePoints(order, 'Returned')
         movePoints(order, 'Reversed')
         for (const line of order.items) {
           const item = items.find((candidate) => candidate.id === line.inventoryItemId)

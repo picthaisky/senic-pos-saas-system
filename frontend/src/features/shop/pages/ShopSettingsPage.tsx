@@ -5,9 +5,10 @@ import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 import { Button, Card, ErrorState, Input, PageHeader, PageSpinner, Select } from '@/components/ui'
+import { formatCurrency } from '@/lib/format'
 import { toast } from '@/stores/toast'
 import { type ShopSettings, useSaveShopSettings, useShopSettings } from '../api'
-import { pointsFor, type VatMode } from '../pricing'
+import { pointsDiscountOf, pointsFor, type VatMode } from '../pricing'
 
 const VAT_MODES: readonly VatMode[] = ['None', 'Inclusive', 'Exclusive']
 
@@ -59,6 +60,9 @@ function SettingsForm({ settings }: { settings: ShopSettings }) {
         bahtPerPoint: z
           .number({ error: t('validation.number') })
           .min(0, t('validation.nonNegative')),
+        pointValueBaht: z
+          .number({ error: t('validation.number') })
+          .min(0, t('validation.nonNegative')),
         receiptFooter: z.string().trim().max(500),
       }),
     [t],
@@ -80,12 +84,14 @@ function SettingsForm({ settings }: { settings: ShopSettings }) {
       vatMode: settings.vatMode,
       vatRatePercent: settings.vatRatePercent,
       bahtPerPoint: settings.bahtPerPoint,
+      pointValueBaht: settings.pointValueBaht,
       receiptFooter: settings.receiptFooter ?? '',
     },
   })
 
   const vatMode = useWatch({ control, name: 'vatMode' })
   const bahtPerPoint = useWatch({ control, name: 'bahtPerPoint' }) || 0
+  const pointValueBaht = useWatch({ control, name: 'pointValueBaht' }) || 0
 
   const onSubmit = handleSubmit((values) => {
     save.mutate(
@@ -200,6 +206,20 @@ function SettingsForm({ settings }: { settings: ShopSettings }) {
             }
             error={errors.bahtPerPoint?.message}
             {...register('bahtPerPoint', { valueAsNumber: true })}
+          />
+          <Input
+            label={t('settings.pointValueBaht')}
+            inputMode="decimal"
+            autoComplete="off"
+            hint={
+              pointValueBaht > 0
+                ? t('settings.pointValueExample', {
+                    amount: formatCurrency(pointsDiscountOf(100, pointValueBaht)),
+                  })
+                : t('settings.pointValueOff')
+            }
+            error={errors.pointValueBaht?.message}
+            {...register('pointValueBaht', { valueAsNumber: true })}
           />
         </div>
         <p className="mt-4 text-sm text-muted">{t('settings.pointsRules')}</p>

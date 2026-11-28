@@ -29,8 +29,11 @@ export type UpdateCustomer = Partial<
 export interface LoyaltyTransaction {
   id: string
   customerId: string
-  /** 'Reversed' = points taken back because the bill that earned them was cancelled. */
-  type: 'Earned' | 'Redeemed' | 'Reversed'
+  /**
+   * 'Reversed' = points taken back because the bill that earned them was cancelled;
+   * 'Returned' = points given back because the bill they were used on was cancelled.
+   */
+  type: 'Earned' | 'Redeemed' | 'Reversed' | 'Returned'
   points: number
   orderId: string | null
   description: string

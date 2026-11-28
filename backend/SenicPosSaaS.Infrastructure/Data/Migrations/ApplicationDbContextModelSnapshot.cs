@@ -315,7 +315,14 @@ namespace SenicPosSaaS.Infrastructure.Data.Migrations
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("PointsDiscount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("PointsEarned")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PointsRedeemed")
                         .HasColumnType("integer");
 
                     b.Property<int>("Status")
@@ -535,6 +542,10 @@ namespace SenicPosSaaS.Infrastructure.Data.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("PointValueBaht")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<string>("ReceiptFooter")
                         .HasMaxLength(500)

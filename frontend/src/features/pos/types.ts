@@ -18,6 +18,8 @@ export interface CreateOrder {
   customerId: string | null
   paymentMethod: PaymentMethod
   discountAmount: number
+  /** Points of the customer used as a discount. Absent on sales queued by an older version. */
+  pointsRedeemed?: number
   notes: string | null
   /** Generated per cart so a retried or re-synced order is not created twice. */
   clientOrderId: string
@@ -48,6 +50,9 @@ export interface Order {
   vatRatePercent: number
   /** Points this bill gave its customer. */
   pointsEarned: number
+  /** Points the customer used on this bill, and the baht they took off. */
+  pointsRedeemed: number
+  pointsDiscount: number
   status: OrderStatus
   paymentMethod: PaymentMethod
   createdAt: string

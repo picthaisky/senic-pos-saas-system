@@ -143,6 +143,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
             entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
+            entity.Property(e => e.PointsDiscount).HasPrecision(18, 2);
 
             entity.HasOne(e => e.Customer)
                 .WithMany(c => c.Orders)
@@ -271,6 +272,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.ReceiptFooter).HasMaxLength(500);
             entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
             entity.Property(e => e.BahtPerPoint).HasPrecision(18, 2);
+            entity.Property(e => e.PointValueBaht).HasPrecision(18, 2);
         });
 
         // Configure AuditLog entity

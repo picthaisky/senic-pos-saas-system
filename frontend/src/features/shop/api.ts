@@ -16,6 +16,8 @@ export interface ShopSettings {
   vatRatePercent: number
   /** One point per this many baht paid; 0 = sales earn no points. */
   bahtPerPoint: number
+  /** Baht off a bill per point used; 0 = points cannot be used as a discount. */
+  pointValueBaht: number
   receiptFooter: string | null
 }
 
@@ -29,6 +31,7 @@ export const DEFAULT_SHOP_SETTINGS: ShopSettings = {
   vatMode: 'None',
   vatRatePercent: 7,
   bahtPerPoint: 0,
+  pointValueBaht: 0,
   receiptFooter: null,
 }
 

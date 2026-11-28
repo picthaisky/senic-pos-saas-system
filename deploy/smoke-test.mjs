@@ -158,9 +158,10 @@ if (!credentials) {
     const second = await call('POST', '/api/customers', { firstName: 'สมชาย', lastName: 'ใจดี' })
     check('a second customer without email', second.status === 201, `status ${second.status}`)
 
-    // Priced as a VAT-registered shop with tax-inclusive prices and one point per 25 baht.
+    // Priced as a VAT-registered shop with tax-inclusive prices, one point per 25 baht, and
+    // half a baht off per point used.
     // The shop's own settings are put back at the end.
-    const priced = await call('PUT', '/api/shop-settings', { ...shop.json, shopName: shop.json?.shopName || 'Smoke test', vatMode: 'Inclusive', vatRatePercent: 7, bahtPerPoint: 25 })
+    const priced = await call('PUT', '/api/shop-settings', { ...shop.json, shopName: shop.json?.shopName || 'Smoke test', vatMode: 'Inclusive', vatRatePercent: 7, bahtPerPoint: 25, pointValueBaht: 0.5 })
     check('shop settings can be changed by a manager', priced.status === 200 && priced.json?.vatMode === 'Inclusive', `status ${priced.status}`)
 
     const sale = {
@@ -197,6 +198,20 @@ if (!credentials) {
     const redeem = await call('POST', `/api/customers/${customer.json?.id}/loyalty/redeem`, { points: 20, description: 'แลก' })
     const history = await call('GET', `/api/customers/${customer.json?.id}/loyalty`)
     check('loyalty earn, redeem and history', redeem.json?.loyaltyPoints === 32 && history.json?.length === 3, `points ${redeem.json?.loyaltyPoints}`)
+    // 19.99 less 10 points at 0.50 = 14.99 to pay, with 14.99 x 7/107 = 0.98 of tax in it.
+    const withPoints = await call('POST', '/api/orders', { customerId: customer.json?.id, paymentMethod: 'Cash', pointsRedeemed: 10, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
+    const afterPoints = await call('GET', `/api/customers/${customer.json?.id}`)
+    check(
+      'points used on a bill come off before tax and leave the balance',
+      withPoints.status === 201 && withPoints.json?.pointsDiscount === 5 && withPoints.json?.netAmount === 14.99 && withPoints.json?.taxAmount === 0.98 && afterPoints.json?.loyaltyPoints === 22,
+      `status ${withPoints.status}, net ${withPoints.json?.netAmount}, tax ${withPoints.json?.taxAmount}, points ${afterPoints.json?.loyaltyPoints}`,
+    )
+    const tooManyPoints = await call('POST', '/api/orders', { customerId: customer.json?.id, paymentMethod: 'Cash', pointsRedeemed: 23, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
+    check('more points than the balance is a 409', tooManyPoints.status === 409, `status ${tooManyPoints.status}`)
+    const cancelPoints = await call('POST', `/api/orders/${withPoints.json?.id}/cancel`)
+    const pointsBack = await call('GET', `/api/customers/${customer.json?.id}`)
+    check('cancelling that bill gives the points back', cancelPoints.status === 200 && pointsBack.json?.loyaltyPoints === 32, `points ${pointsBack.json?.loyaltyPoints}`)
+
     const tooMuchOff = await call('POST', '/api/orders', { paymentMethod: 'Cash', discountAmount: 1000, items: [{ inventoryItemId: item.json?.id, quantity: 1 }] })
     check('a discount larger than the bill is a 400', tooMuchOff.status === 400, `status ${tooMuchOff.status}`)
 

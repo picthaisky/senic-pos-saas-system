@@ -102,6 +102,7 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   await page.getByLabel('ชื่อร้าน').fill('ร้านทดสอบ E2E')
   await page.getByLabel('ร้านกับ VAT').selectOption('Inclusive')
   await page.getByLabel('ยอดซื้อกี่บาทต่อ 1 แต้ม').fill('25')
+  await page.getByLabel('1 แต้มใช้เป็นส่วนลดได้กี่บาท').fill('0.5')
   await shot(page, '02b-settings')
   await page.getByRole('button', { name: 'บันทึก' }).click()
   await expect(page.getByText('บันทึกการตั้งค่าแล้ว')).toBeVisible()
@@ -292,6 +293,53 @@ test('adds a customer, corrects their details, and opens the subscription page',
   await expect(page.getByRole('heading', { name: 'แพ็กเกจของร้าน' })).toBeVisible()
   await expect(page.getByText(/ยังไม่มีข้อมูลแพ็กเกจ/)).toBeVisible()
   await shot(page, '15-subscription')
+})
+
+test('uses the points of a customer as a discount at the till', async ({ page }) => {
+  await signIn(page)
+  const id = `${Date.now()}`.slice(-8)
+  const customer = `แต้ม${id} ทดสอบ`
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByLabel('ชื่อ', { exact: true }).fill(`แต้ม${id}`)
+  await page.getByLabel('นามสกุล').fill('ทดสอบ')
+  await page.getByRole('button', { name: 'เพิ่มลูกค้า' }).click()
+  await expect(page.getByText('เพิ่มลูกค้าแล้ว')).toBeVisible()
+  await page.getByRole('button', { name: `ดูรายละเอียด ${customer}` }).click()
+  await page.getByRole('button', { name: 'เพิ่มแต้ม' }).click()
+  const give = page.getByRole('dialog', { name: 'เพิ่มแต้ม' })
+  await give.getByLabel('แต้มสะสม').fill('40')
+  await give.getByRole('button', { name: 'เพิ่มแต้ม' }).click()
+  await expect(page.getByText('เพิ่มแต้มแล้ว')).toBeVisible()
+
+  const item = await addItem(page, { price: '50', quantity: '5' })
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  await scan(page, item.barcode)
+  const cart = page.getByRole('region', { name: 'ตะกร้า' })
+  await expect(cart.getByText(item.name)).toBeVisible()
+  await cart.getByLabel('ลูกค้า').selectOption({ label: customer })
+
+  // The shop gives half a baht per point: 20 points take 10 off, 40.00 is paid, and the tax
+  // inside it is 40 x 7/107 = 2.62.
+  await cart.getByLabel('ใช้แต้มเป็นส่วนลด').fill('20')
+  await expect(cart.getByText('ส่วนลดจากแต้ม (20 แต้ม)')).toBeVisible()
+  await expect(cart.getByText('-฿10.00')).toBeVisible()
+  await expect(cart.getByText('฿40.00').first()).toBeVisible()
+  await expect(cart.getByText('฿2.62')).toBeVisible()
+  await shot(page, '15b-pos-points')
+
+  await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
+  const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
+  await expect(receipt.getByText('฿40.00')).toBeVisible()
+  await expect(receipt.getByText('-฿10.00')).toBeVisible()
+  await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
+
+  // 40 - 20 used + 1 earned on the 40 baht paid.
+  await page.getByRole('link', { name: 'ลูกค้า', exact: true }).click()
+  await page.getByRole('button', { name: `ดูรายละเอียด ${customer}` }).click()
+  const history = page.getByRole('region', { name: 'ประวัติแต้ม' })
+  await expect(history.getByText(/ใช้เป็นส่วนลด ORD-/)).toBeVisible()
+  await expect(history.getByText(/จากการขาย ORD-/)).toBeVisible()
+  await expect(page.getByRole('row', { name: new RegExp(customer) }).getByText('21')).toBeVisible()
 })
 
 test('updates another open window when a sale happens', async ({ page, context }) => {

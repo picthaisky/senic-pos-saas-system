@@ -158,7 +158,9 @@
     "searchPlaceholder": "Name, email or phone",
     "noMatch": "No customer matches the search",
     "fromSale": "From sale {{number}}",
-    "fromCancel": "Bill {{number}} cancelled"
+    "fromCancel": "Bill {{number}} cancelled",
+    "usedOnSale": "Used as a discount on {{number}}",
+    "returnedOnCancel": "Returned, bill {{number}} cancelled"
   },
   "users": {
     "list": "Users",
@@ -330,8 +332,11 @@
     "bahtPerPoint": "Baht spent per point",
     "pointsOff": "0 = sales give no points",
     "pointsExample": "A purchase of 1,000 baht earns {{points}} points",
-    "pointsRules": "A customer earns points when their name is chosen at the till, on what they actually pay after discounts. A part of a point is not given, and points are taken back when the bill is cancelled.",
-    "saved": "Settings saved"
+    "pointsRules": "A customer earns points when their name is chosen at the till, on what they actually pay after discounts and points used. A part of a point is not given. A discount from points comes off before VAT, needs the till to be online, and must leave something to pay. When a bill is cancelled, the points it gave are taken back and the points used on it are returned.",
+    "saved": "Settings saved",
+    "pointValueBaht": "Baht off per point used",
+    "pointValueOff": "0 = points cannot be used as a discount",
+    "pointValueExample": "100 points take {{amount}} off"
   },
   "pos": {
     "scanBarcode": "Scan barcode",
@@ -370,7 +375,12 @@
     "billDiscount": "Bill discount",
     "billDiscountKind": "Discount unit",
     "pointsToEarn": "Points the customer will earn",
-    "pointsEarned": "Points earned"
+    "pointsEarned": "Points earned",
+    "usePoints": "Use points as a discount",
+    "usePointsHint": "{{balance}} points; up to {{max}} on this bill (1 point = {{value}})",
+    "usePointsOffline": "Points cannot be used while offline",
+    "pointsDiscount": "Points discount ({{points}} points)",
+    "pointsNeedServer": "A bill that uses points needs a connection. Try again, or remove the points and sell."
   },
   "orders": {
     "from": "From",
@@ -433,7 +443,8 @@
     "paidBy": "Paid by",
     "saved": "Total discount",
     "points": "Points earned",
-    "notTaxInvoice": "This document is not a tax invoice"
+    "notTaxInvoice": "This document is not a tax invoice",
+    "pointsDiscount": "Points discount ({{points}} points)"
   },
   "offline": {
     "badge": "Offline",

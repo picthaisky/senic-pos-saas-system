@@ -32,6 +32,10 @@ public class ShopSettingsDto
     [Range(0, 1_000_000)]
     public decimal BahtPerPoint { get; set; }
 
+    /// <summary>Baht off a bill per point used; 0 = points cannot be used as a discount.</summary>
+    [Range(0, 1_000_000)]
+    public decimal PointValueBaht { get; set; }
+
     [StringLength(500)]
     public string? ReceiptFooter { get; set; }
 }

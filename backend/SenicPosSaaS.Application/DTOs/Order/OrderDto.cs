@@ -15,6 +15,9 @@ public class OrderDto
     public VatMode VatMode { get; set; }
     public decimal VatRatePercent { get; set; }
     public int PointsEarned { get; set; }
+    public int PointsRedeemed { get; set; }
+    /// <summary>Baht the redeemed points took off; separate from <see cref="DiscountAmount"/>.</summary>
+    public decimal PointsDiscount { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public DateTime CreatedAt { get; set; }

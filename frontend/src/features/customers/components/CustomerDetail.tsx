@@ -7,9 +7,24 @@ import { cn } from '@/lib/cn'
 import { formatDateTime, formatNumber } from '@/lib/format'
 import { toast } from '@/stores/toast'
 import { useChangePoints, useLoyaltyHistory } from '../api'
-import type { Customer } from '../types'
+import type { Customer, LoyaltyTransaction } from '../types'
 
 type PointsAction = 'earn' | 'redeem'
+
+const ADDS_POINTS: Record<LoyaltyTransaction['type'], boolean> = {
+  Earned: true,
+  Returned: true,
+  Redeemed: false,
+  Reversed: false,
+}
+
+/** How a line written by a bill reads; `number` is the bill's number. */
+const FROM_BILL = {
+  Earned: 'customers.fromSale',
+  Redeemed: 'customers.usedOnSale',
+  Reversed: 'customers.fromCancel',
+  Returned: 'customers.returnedOnCancel',
+} as const satisfies Record<LoyaltyTransaction['type'], string>
 
 export function CustomerDetail({ customer }: { customer: Customer }) {
   const { t } = useTranslation()
@@ -64,10 +79,10 @@ export function CustomerDetail({ customer }: { customer: Customer }) {
                     <span
                       className={cn(
                         'font-semibold tabular-nums',
-                        entry.type === 'Earned' ? 'text-success' : 'text-danger',
+                        ADDS_POINTS[entry.type] ? 'text-success' : 'text-danger',
                       )}
                     >
-                      {entry.type === 'Earned' ? '+' : '−'}
+                      {ADDS_POINTS[entry.type] ? '+' : '−'}
                       {formatNumber(entry.points)}
                     </span>
                     <span className="text-xs text-muted">{formatDateTime(entry.createdAt)}</span>
@@ -75,12 +90,7 @@ export function CustomerDetail({ customer }: { customer: Customer }) {
                   <p className="text-sm text-muted">
                     {/* A line written by a sale or a cancellation carries the bill's number. */}
                     {entry.orderId
-                      ? t(
-                          entry.type === 'Reversed' ? 'customers.fromCancel' : 'customers.fromSale',
-                          {
-                            number: entry.description,
-                          },
-                        )
+                      ? t(FROM_BILL[entry.type], { number: entry.description })
                       : entry.description}
                   </p>
                 </li>

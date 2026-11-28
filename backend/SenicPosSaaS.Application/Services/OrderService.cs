@@ -68,6 +68,23 @@ public class OrderService : IOrderService
         // alter what this bill says.
         var settings = await _shopSettings.GetEntityAsync(dto.TenantId, cancellationToken);
 
+        // Points used on the bill are a discount like any other, so they come off before tax.
+        decimal pointsDiscount = 0;
+        if (dto.PointsRedeemed < 0)
+            throw new InvalidRequestException("The points to use cannot be negative.");
+        if (dto.PointsRedeemed > 0)
+        {
+            if (customer == null)
+                throw new InvalidRequestException("Points can only be used on a bill with a customer.");
+            if (settings.PointValueBaht <= 0)
+                throw new InvalidRequestException("This shop does not take points as a discount.");
+            // Checked against the balance read in this attempt; a parallel bill spending the same
+            // points fails the save and this runs again from the new balance.
+            if (dto.PointsRedeemed > customer.LoyaltyPoints)
+                throw new ConflictException($"Not enough points: the balance is {customer.LoyaltyPoints}.");
+            pointsDiscount = OrderPricing.Round(dto.PointsRedeemed * settings.PointValueBaht);
+        }
+
         var now = DateTime.UtcNow;
         var order = new Order
         {
@@ -132,9 +149,14 @@ public class OrderService : IOrderService
 
         if (order.DiscountAmount > totalAmount)
             throw new InvalidRequestException("The bill discount cannot be more than the total of the items.");
+        // A bill paid entirely with points would be goods given away, which is taxed differently.
+        if (pointsDiscount > 0 && pointsDiscount >= totalAmount - order.DiscountAmount)
+            throw new InvalidRequestException("The points must leave something to pay. Use fewer points.");
 
         // Discounts come off before tax, and the tax is worked out once for the whole bill.
-        var amounts = OrderPricing.Calculate(totalAmount, order.DiscountAmount, settings.VatMode, settings.VatRatePercent);
+        var amounts = OrderPricing.Calculate(totalAmount, order.DiscountAmount + pointsDiscount, settings.VatMode, settings.VatRatePercent);
+        order.PointsRedeemed = dto.PointsRedeemed;
+        order.PointsDiscount = pointsDiscount;
         order.TotalAmount = amounts.ItemsTotal;
         order.TaxAmount = amounts.TaxAmount;
         order.NetAmount = amounts.NetAmount;
@@ -146,9 +168,12 @@ public class OrderService : IOrderService
         // bill: a retried request finds the bill and does not earn twice.
         if (customer != null)
         {
+            if (order.PointsRedeemed > 0)
+                await MovePointsAsync(customer, order, LoyaltyTransactionType.Redeemed, order.PointsRedeemed, now, cancellationToken);
+
             order.PointsEarned = OrderPricing.PointsFor(order.NetAmount, settings.BahtPerPoint);
             if (order.PointsEarned > 0)
-                await MovePointsAsync(customer, order, LoyaltyTransactionType.Earned, now, cancellationToken);
+                await MovePointsAsync(customer, order, LoyaltyTransactionType.Earned, order.PointsEarned, now, cancellationToken);
         }
 
         // The order, its items and the stock changes are saved together in one transaction.
@@ -227,13 +252,19 @@ public class OrderService : IOrderService
             }
         }
 
-        // Take back exactly what this bill gave. The balance may go below zero when the customer
-        // has already spent the points: buying, redeeming and cancelling must not leave a profit.
-        if (order.PointsEarned > 0 && order.CustomerId.HasValue)
+        // Give back the points used on this bill, and take back exactly what it gave. The balance
+        // may go below zero when the customer has already spent the points: buying, redeeming and
+        // cancelling must not leave a profit.
+        if ((order.PointsEarned > 0 || order.PointsRedeemed > 0) && order.CustomerId.HasValue)
         {
             var customer = order.Customer ?? await _customerRepository.GetByIdAsync(order.CustomerId.Value, cancellationToken);
             if (customer != null)
-                await MovePointsAsync(customer, order, LoyaltyTransactionType.Reversed, order.UpdatedAt.Value, cancellationToken);
+            {
+                if (order.PointsRedeemed > 0)
+                    await MovePointsAsync(customer, order, LoyaltyTransactionType.Returned, order.PointsRedeemed, order.UpdatedAt.Value, cancellationToken);
+                if (order.PointsEarned > 0)
+                    await MovePointsAsync(customer, order, LoyaltyTransactionType.Reversed, order.PointsEarned, order.UpdatedAt.Value, cancellationToken);
+            }
         }
 
         await _orderRepository.UpdateAsync(order, cancellationToken);
@@ -242,10 +273,14 @@ public class OrderService : IOrderService
         return true;
     }
 
-    /// <summary>Adds (Earned) or takes back (Reversed) the bill's points, with a history line that names the bill.</summary>
-    private async Task MovePointsAsync(Customer customer, Order order, LoyaltyTransactionType type, DateTime now, CancellationToken cancellationToken)
+    /// <summary>
+    /// Adds (Earned, Returned) or takes away (Redeemed, Reversed) points because of a bill, with a
+    /// history line that names the bill.
+    /// </summary>
+    private async Task MovePointsAsync(Customer customer, Order order, LoyaltyTransactionType type, int points, DateTime now, CancellationToken cancellationToken)
     {
-        customer.LoyaltyPoints += type == LoyaltyTransactionType.Earned ? order.PointsEarned : -order.PointsEarned;
+        var adds = type is LoyaltyTransactionType.Earned or LoyaltyTransactionType.Returned;
+        customer.LoyaltyPoints += adds ? points : -points;
         customer.UpdatedAt = now;
         await _customerRepository.UpdateAsync(customer, cancellationToken);
 
@@ -255,7 +290,7 @@ public class OrderService : IOrderService
             TenantId = order.TenantId,
             CustomerId = customer.Id,
             Type = type,
-            Points = order.PointsEarned,
+            Points = points,
             OrderId = order.Id,
             Description = order.OrderNumber,
             CreatedAt = now
@@ -283,6 +318,8 @@ public class OrderService : IOrderService
             VatMode = order.VatMode,
             VatRatePercent = order.VatRatePercent,
             PointsEarned = order.PointsEarned,
+            PointsRedeemed = order.PointsRedeemed,
+            PointsDiscount = order.PointsDiscount,
             Status = order.Status,
             PaymentMethod = order.PaymentMethod,
             CreatedAt = order.CreatedAt,

@@ -32,6 +32,8 @@ export interface BillTotals {
   /** The lines after their own discounts. */
   itemsTotal: number
   billDiscount: number
+  /** What the customer's points take off, after the bill discount. */
+  pointsDiscount: number
   /** VAT added (exclusive prices) or contained (inclusive prices); 0 without VAT. */
   tax: number
   /** What the customer pays. */
@@ -60,6 +62,8 @@ export function billTotals(
   lines: readonly PricedLine[],
   billDiscount: BillDiscount,
   vat: VatSettings,
+  /** Baht taken off by the customer's points (see `pointsDiscountOf`). */
+  pointsDiscount = 0,
 ): BillTotals {
   const gross = lines.reduce((sum, line) => sum + toSatang(line.unitPrice) * line.quantity, 0)
   const lineDiscounts = lines.reduce((sum, line) => sum + toSatang(lineDiscountOf(line)), 0)
@@ -70,7 +74,9 @@ export function billTotals(
       ? divideHalfUp(itemsTotal * Math.round(billDiscount.value * 100), 10_000)
       : toSatang(billDiscount.value)
   const discount = Math.min(Math.max(0, asked), itemsTotal)
-  const afterDiscount = itemsTotal - discount
+  // Points are a discount like the others, taken last and before tax.
+  const points = Math.min(Math.max(0, toSatang(pointsDiscount)), itemsTotal - discount)
+  const afterDiscount = itemsTotal - discount - points
 
   // The rate in hundredths of a percent, so 7.5% stays a whole number too.
   const rate = Math.round(vat.vatRatePercent * 100)
@@ -88,9 +94,32 @@ export function billTotals(
     lineDiscounts: toBaht(lineDiscounts),
     itemsTotal: toBaht(itemsTotal),
     billDiscount: toBaht(discount),
+    pointsDiscount: toBaht(points),
     tax: toBaht(tax),
     total: toBaht(total),
   }
+}
+
+/** What so many points take off a bill, when one point is worth `pointValueBaht`. */
+export function pointsDiscountOf(points: number, pointValueBaht: number): number {
+  const whole = Number.isFinite(points) ? Math.max(0, Math.floor(points)) : 0
+  return toBaht(whole * Math.max(0, toSatang(pointValueBaht)))
+}
+
+/**
+ * The most points a bill can take: no more than the customer has, and the bill must still
+ * leave something to pay (the server refuses a bill paid entirely with points).
+ * `remaining` is the items after the line and bill discounts.
+ */
+export function maxRedeemablePoints(
+  remaining: number,
+  pointValueBaht: number,
+  balance: number,
+): number {
+  const value = toSatang(pointValueBaht)
+  if (value <= 0 || balance <= 0) return 0
+  const byBill = Math.floor((toSatang(remaining) - 1) / value)
+  return Math.max(0, Math.min(Math.floor(balance), byBill))
 }
 
 /** One point for every full `bahtPerPoint` paid; none when the scheme is off. */

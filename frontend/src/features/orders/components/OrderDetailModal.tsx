@@ -97,6 +97,14 @@ export function OrderDetailModal({ order, onClose, onCancelOrder }: OrderDetailM
             <dd className="text-right tabular-nums">-{formatCurrency(order.discountAmount)}</dd>
           </>
         )}
+        {order.pointsRedeemed > 0 && (
+          <>
+            <dt className="text-muted">
+              {t('pos.pointsDiscount', { points: formatNumber(order.pointsRedeemed) })}
+            </dt>
+            <dd className="text-right tabular-nums">-{formatCurrency(order.pointsDiscount)}</dd>
+          </>
+        )}
         {order.vatMode === 'Exclusive' && (
           <>
             <dt className="text-muted">{t('pos.tax', { rate: order.vatRatePercent })}</dt>

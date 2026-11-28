@@ -62,6 +62,7 @@ describe('cart store', () => {
       lineDiscounts: 0,
       itemsTotal: 65.47,
       billDiscount: 0,
+      pointsDiscount: 0,
       tax: 4.58,
       total: 70.05,
     })

@@ -1,9 +1,10 @@
-import { fireEvent, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import { customersApi } from '@/features/customers/api'
 import { useCartStore } from '@/features/pos/cart-store'
 import i18n from '@/i18n'
 import { api } from '@/lib/api'
 import { mockShopSettings } from '@/mocks/mock-data'
+import { useNetworkStore } from '@/stores/network'
 import { renderApp } from '@/test/render-app'
 import { DEFAULT_SHOP_SETTINGS } from './api'
 
@@ -170,5 +171,79 @@ describe('the till, with discounts, VAT in the prices and points', () => {
     ).toBeInTheDocument()
     const balance = (await customersApi.list()).find((c) => c.id === somchai.id)!.loyaltyPoints
     expect(balance).toBe(somchai.loyaltyPoints)
+  })
+
+  it('uses the points of a customer as a discount, and gives them back when the bill is cancelled', async () => {
+    mockShopSettings.current = {
+      ...DEFAULT_SHOP_SETTINGS,
+      vatMode: 'Inclusive',
+      bahtPerPoint: 5,
+      pointValueBaht: 0.5,
+    }
+    renderApp('/pos', 'Cashier')
+    const barcode = await screen.findByLabelText(t('pos.scanBarcode'), { selector: 'input' })
+    fireEvent.change(barcode, { target: { value: '8850000000001' } })
+    fireEvent.submit(barcode.closest('form')!)
+    const cart = within(screen.getByRole('region', { name: t('pos.cart') }))
+    await cart.findByText('น้ำดื่ม 600 มล.')
+
+    // A walk-in customer has no points to use.
+    expect(cart.queryByLabelText(t('pos.usePoints'))).not.toBeInTheDocument()
+    const somchai = (await customersApi.list()).find((c) => c.firstName === 'สมชาย')!
+    await cart.findByRole('option', { name: somchai.fullName })
+    fireEvent.change(cart.getByLabelText(t('pos.customer')), { target: { value: somchai.id } })
+
+    // ฿10 at ฿0.50 a point: 19 points leave ฿0.50 to pay; 20 would leave nothing.
+    const points = await cart.findByLabelText(t('pos.usePoints'))
+    fireEvent.change(points, { target: { value: '500' } })
+    expect(points).toHaveValue(19)
+    fireEvent.change(points, { target: { value: '8' } })
+    expect(
+      cart.getByText(t('pos.pointsDiscount', { points: '8' })).closest('div'),
+    ).toHaveTextContent('-฿4.00')
+    // 6.00 is paid: the tax is 7/107 of that, and it earns one point.
+    expect(cart.getByText(t('pos.taxIncluded', { rate: 7 })).closest('div')).toHaveTextContent(
+      '฿0.39',
+    )
+    expect(cart.getByText(t('pos.pointsToEarn')).closest('div')).toHaveTextContent('+1')
+
+    fireEvent.click(cart.getByRole('button', { name: t('pos.checkout') }))
+    const receipt = within(await screen.findByRole('dialog', { name: t('pos.orderCreated') }))
+    expect(receipt.getByText('฿6.00')).toBeInTheDocument()
+    expect(receipt.getByText('-฿4.00')).toBeInTheDocument()
+    const after = (await customersApi.list()).find((c) => c.id === somchai.id)!
+    expect(after.loyaltyPoints).toBe(somchai.loyaltyPoints - 8 + 1)
+
+    const sold = (await api.get('/orders', { params: { page: 1 } })).data.items[0]
+    expect(sold).toMatchObject({ pointsRedeemed: 8, pointsDiscount: 4, netAmount: 6 })
+    await api.post(`/orders/${sold.id}/cancel`)
+    const back = (await customersApi.list()).find((c) => c.id === somchai.id)!
+    expect(back.loyaltyPoints).toBe(somchai.loyaltyPoints)
+  })
+
+  it('does not take points while the till is offline', async () => {
+    mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, pointValueBaht: 1 }
+    renderApp('/pos', 'Cashier')
+    const barcode = await screen.findByLabelText(t('pos.scanBarcode'), { selector: 'input' })
+    fireEvent.change(barcode, { target: { value: '8850000000001' } })
+    fireEvent.submit(barcode.closest('form')!)
+    const cart = within(screen.getByRole('region', { name: t('pos.cart') }))
+    await cart.findByText('น้ำดื่ม 600 มล.')
+    const somchai = (await customersApi.list()).find((c) => c.firstName === 'สมชาย')!
+    await cart.findByRole('option', { name: somchai.fullName })
+    fireEvent.change(cart.getByLabelText(t('pos.customer')), { target: { value: somchai.id } })
+    const points = await cart.findByLabelText(t('pos.usePoints'))
+    fireEvent.change(points, { target: { value: '5' } })
+    expect(cart.getByText('฿5.00')).toBeInTheDocument()
+
+    act(() => useNetworkStore.setState({ online: false }))
+    try {
+      expect(cart.getByLabelText(t('pos.usePoints'))).toBeDisabled()
+      expect(cart.getByText(t('pos.usePointsOffline'))).toBeInTheDocument()
+      // The bill is back at its full price: the points are not counted.
+      expect(cart.queryByText(t('pos.pointsDiscount', { points: '5' }))).not.toBeInTheDocument()
+    } finally {
+      act(() => useNetworkStore.setState({ online: true }))
+    }
   })
 })

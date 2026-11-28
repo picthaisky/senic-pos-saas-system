@@ -28,14 +28,15 @@ public class ShopSettingsApiTests : IClassFixture<ApiFactory>
         return (await response.Content.ReadFromJsonAsync<T>(ApiFactory.Json))!;
     }
 
-    private static async Task<HttpClient> SetAsync(HttpClient owner, VatMode vatMode, decimal bahtPerPoint = 0, decimal vatRate = 7)
+    private static async Task<HttpClient> SetAsync(HttpClient owner, VatMode vatMode, decimal bahtPerPoint = 0, decimal vatRate = 7, decimal pointValueBaht = 0)
     {
         var response = await owner.PutAsJsonAsync("/api/shop-settings", new
         {
             shopName = "Test shop",
             vatMode = vatMode.ToString(),
             vatRatePercent = vatRate,
-            bahtPerPoint
+            bahtPerPoint,
+            pointValueBaht
         });
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return owner;
@@ -336,6 +337,155 @@ public class ShopSettingsApiTests : IClassFixture<ApiFactory>
         // A balance below zero cannot be spent.
         (await owner.PostAsJsonAsync($"/api/customers/{customer.Id}/loyalty/redeem", new { points = 1, description = "no" })).StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await _factory.StockOfAsync(item.Id)).Should().Be(50);
+    }
+
+    // ---------- Points used as a discount ----------
+
+    private static async Task<CustomerDto> CustomerWithPointsAsync(HttpClient client, string name, int points)
+    {
+        var customer = await NewCustomerAsync(client, name);
+        return await ReadAsync<CustomerDto>(await client.PostAsJsonAsync($"/api/customers/{customer.Id}/loyalty/earn", new { points, description = "Opening balance" }));
+    }
+
+    [Fact]
+    public async Task PointsUsedOnABill_ComeOffBeforeTax_AndPointsAreEarnedOnWhatIsPaid()
+    {
+        var owner = await SetAsync(await _factory.SignInAsync("owner@a.test"), VatMode.Inclusive, bahtPerPoint: 25, pointValueBaht: 1);
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Paid partly with points", 325, 50);
+        var customer = await CustomerWithPointsAsync(owner, "Redeemer", 100);
+
+        var order = await ReadAsync<OrderDto>(await owner.PostAsJsonAsync("/api/orders", new
+        {
+            customerId = customer.Id,
+            paymentMethod = "Cash",
+            pointsRedeemed = 25,
+            items = new[] { new { inventoryItemId = item.Id, quantity = 1 } }
+        }));
+
+        order.TotalAmount.Should().Be(325);
+        order.DiscountAmount.Should().Be(0, "the points are not the cashier's discount");
+        order.PointsRedeemed.Should().Be(25);
+        order.PointsDiscount.Should().Be(25);
+        order.NetAmount.Should().Be(300);
+        order.TaxAmount.Should().Be(19.63m, "7/107 of the 300 paid, not of 325");
+        order.PointsEarned.Should().Be(12, "300 paid at 25 baht a point");
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(87);
+
+        var again = await ReadAsync<OrderDto>(await owner.GetAsync($"/api/orders/{order.Id}"));
+        again.PointsRedeemed.Should().Be(25);
+        again.PointsDiscount.Should().Be(25);
+
+        var history = await ReadAsync<List<LoyaltyTransactionDto>>(await owner.GetAsync($"/api/customers/{customer.Id}/loyalty"));
+        history.Where(h => h.OrderId == order.Id).Select(h => (h.Type, h.Points)).Should().BeEquivalentTo(new[]
+        {
+            (LoyaltyTransactionType.Redeemed, 25),
+            (LoyaltyTransactionType.Earned, 12)
+        });
+    }
+
+    [Fact]
+    public async Task PointsAndABillDiscountTogether_BothComeOff_AndAFractionOfABahtPerPointWorks()
+    {
+        var owner = await SetAsync(await _factory.SignInAsync("owner@a.test"), VatMode.Exclusive, pointValueBaht: 0.25m);
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Two discounts", 100, 50);
+        var customer = await CustomerWithPointsAsync(owner, "Both", 50);
+
+        var order = await ReadAsync<OrderDto>(await owner.PostAsJsonAsync("/api/orders", new
+        {
+            customerId = customer.Id,
+            paymentMethod = "Cash",
+            discountAmount = 10,
+            pointsRedeemed = 30,
+            items = new[] { new { inventoryItemId = item.Id, quantity = 2 } }
+        }));
+
+        order.DiscountAmount.Should().Be(10);
+        order.PointsDiscount.Should().Be(7.50m);
+        order.TaxAmount.Should().Be(12.78m, "7% of 182.50");
+        order.NetAmount.Should().Be(195.28m);
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task ARepeatedRequest_SpendsThePointsOnce()
+    {
+        var owner = await SetAsync(await _factory.SignInAsync("owner@a.test"), VatMode.None, pointValueBaht: 1);
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Retried with points", 100, 50);
+        var customer = await CustomerWithPointsAsync(owner, "Retry redeem", 40);
+        var sale = new
+        {
+            customerId = customer.Id,
+            paymentMethod = "Cash",
+            pointsRedeemed = 30,
+            clientOrderId = Guid.NewGuid(),
+            items = new[] { new { inventoryItemId = item.Id, quantity = 1 } }
+        };
+
+        var first = await ReadAsync<OrderDto>(await owner.PostAsJsonAsync("/api/orders", sale));
+        var again = await ReadAsync<OrderDto>(await owner.PostAsJsonAsync("/api/orders", sale));
+
+        again.Id.Should().Be(first.Id);
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task PointsThatCannotBeUsed_AreRefused_AndNothingIsSold()
+    {
+        var owner = await SetAsync(await _factory.SignInAsync("owner@a.test"), VatMode.None, pointValueBaht: 10);
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Not sold", 95, 10);
+        var customer = await CustomerWithPointsAsync(owner, "Short", 20);
+
+        object Sale(Guid? customerId, int points, decimal billDiscount = 0) => new
+        {
+            customerId,
+            paymentMethod = "Cash",
+            discountAmount = billDiscount,
+            pointsRedeemed = points,
+            items = new[] { new { inventoryItemId = item.Id, quantity = 1 } }
+        };
+
+        (await owner.PostAsJsonAsync("/api/orders", Sale(null, 5))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "a walk-in customer has no points");
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, -1))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, 21))).StatusCode.Should().Be(HttpStatusCode.Conflict, "the balance is 20");
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, 10))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "100 baht of points on a 95 baht bill");
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, 9, billDiscount: 5.01m))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "90 baht of points on what is left after the discount");
+
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, 9, billDiscount: 5))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "points may not pay the whole bill");
+
+        await SetAsync(owner, VatMode.None, pointValueBaht: 0);
+        (await owner.PostAsJsonAsync("/api/orders", Sale(customer.Id, 1))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "the shop does not take points");
+
+        (await _factory.StockOfAsync(item.Id)).Should().Be(10);
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(20);
+    }
+
+    [Fact]
+    public async Task CancellingABillPaidPartlyWithPoints_GivesThemBack_AndTakesBackWhatItEarned_Once()
+    {
+        var owner = await SetAsync(await _factory.SignInAsync("owner@a.test"), VatMode.None, bahtPerPoint: 25, pointValueBaht: 1);
+        var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Cancelled with points", 325, 50);
+        var customer = await CustomerWithPointsAsync(owner, "Changed mind", 100);
+        var order = await ReadAsync<OrderDto>(await owner.PostAsJsonAsync("/api/orders", new
+        {
+            customerId = customer.Id,
+            paymentMethod = "Cash",
+            pointsRedeemed = 25,
+            items = new[] { new { inventoryItemId = item.Id, quantity = 1 } }
+        }));
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(87);
+
+        (await owner.PostAsync($"/api/orders/{order.Id}/cancel", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await owner.PostAsync($"/api/orders/{order.Id}/cancel", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await CustomerAsync(owner, customer.Id)).LoyaltyPoints.Should().Be(100);
+        var history = await ReadAsync<List<LoyaltyTransactionDto>>(await owner.GetAsync($"/api/customers/{customer.Id}/loyalty"));
+        history.Where(h => h.OrderId == order.Id).Select(h => (h.Type, h.Points)).Should().BeEquivalentTo(new[]
+        {
+            (LoyaltyTransactionType.Redeemed, 25),
+            (LoyaltyTransactionType.Earned, 12),
+            (LoyaltyTransactionType.Returned, 25),
+            (LoyaltyTransactionType.Reversed, 12)
+        });
     }
 }
 

@@ -18,6 +18,13 @@ public class CreateOrderDto
     [Range(0, double.MaxValue)]
     public decimal DiscountAmount { get; set; }
 
+    /// <summary>
+    /// Points of the customer to use as a discount on this bill. Needs a customer, and a shop
+    /// that has set what a point is worth.
+    /// </summary>
+    [Range(0, int.MaxValue)]
+    public int PointsRedeemed { get; set; }
+
     public string? Notes { get; set; }
 
     /// <summary>

@@ -1,4 +1,12 @@
-import { billTotals, lineDiscountOf, lineSubtotal, pointsFor, type PricedLine } from './pricing'
+import {
+  billTotals,
+  lineDiscountOf,
+  lineSubtotal,
+  maxRedeemablePoints,
+  pointsDiscountOf,
+  pointsFor,
+  type PricedLine,
+} from './pricing'
 
 // The same figures as the backend's OrderPricingTests and ShopSettingsApiTests: the till and
 // the server must agree to the satang.
@@ -23,6 +31,7 @@ describe('bill totals', () => {
       lineDiscounts: 10,
       itemsTotal: 353.5,
       billDiscount: 17.68, // 5% of 353.50 = 17.675, half up
+      pointsDiscount: 0,
       tax: 21.97, // 335.82 × 7/107 = 21.9695
       total: 335.82,
     })
@@ -98,5 +107,34 @@ describe('points', () => {
 
   it('gives none when the scheme is off', () => {
     expect(pointsFor(1000, 0)).toBe(0)
+  })
+
+  it('takes points off after the other discounts and before tax', () => {
+    const lines = [{ unitPrice: 500, quantity: 1, discount: 0 }]
+    // 100 points at 0.50: 450 is paid, and the tax is 7/107 of 450, not of 500.
+    const discount = pointsDiscountOf(100, 0.5)
+    expect(discount).toBe(50)
+    expect(billTotals(lines, none, vat('Inclusive'), discount)).toMatchObject({
+      pointsDiscount: 50,
+      tax: 29.44,
+      total: 450,
+    })
+    expect(billTotals(lines, none, vat('Exclusive'), discount)).toMatchObject({
+      tax: 31.5,
+      total: 481.5,
+    })
+    expect(pointsDiscountOf(2.9, 0.25)).toBe(0.5)
+    expect(pointsDiscountOf(-3, 1)).toBe(0)
+  })
+
+  it('lets a bill take no more points than the customer has, and leaves something to pay', () => {
+    expect(maxRedeemablePoints(95, 10, 20)).toBe(9)
+    // 90 baht of points on a 90 baht bill would leave nothing to pay.
+    expect(maxRedeemablePoints(90, 10, 20)).toBe(8)
+    expect(maxRedeemablePoints(1000, 10, 20)).toBe(20)
+    expect(maxRedeemablePoints(10, 0.25, 500)).toBe(39)
+    expect(maxRedeemablePoints(100, 0, 500)).toBe(0)
+    expect(maxRedeemablePoints(100, 1, -10)).toBe(0)
+    expect(maxRedeemablePoints(0, 1, 50)).toBe(0)
   })
 })

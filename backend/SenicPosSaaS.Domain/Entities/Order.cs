@@ -24,6 +24,10 @@ public class Order : TenantEntity
     public decimal VatRatePercent { get; set; }
     /// <summary>Points this bill gave its customer; taken back if the bill is cancelled.</summary>
     public int PointsEarned { get; set; }
+    /// <summary>Points the customer used on this bill; given back if the bill is cancelled.</summary>
+    public int PointsRedeemed { get; set; }
+    /// <summary>What those points took off the bill, in baht. Not part of <see cref="DiscountAmount"/>.</summary>
+    public decimal PointsDiscount { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public DateTime? CompletedAt { get; set; }

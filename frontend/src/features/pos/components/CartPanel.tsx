@@ -3,15 +3,24 @@ import { CloudOff, CreditCard, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, ConfirmDialog, Input, Modal, Select } from '@/components/ui'
-import { useCustomers } from '@/features/customers/api'
+import { CUSTOMERS_KEY, useCustomers } from '@/features/customers/api'
 import { DASHBOARD_KEY } from '@/features/dashboard/api'
 import { INVENTORY_KEY } from '@/features/inventory/api'
 import { PrintReceiptButton } from '@/features/receipt/print'
 import { DEFAULT_SHOP_SETTINGS, useShopSettings } from '@/features/shop/api'
-import { lineDiscountOf, lineSubtotal, pointsFor, type VatMode } from '@/features/shop/pricing'
-import { errorMessage } from '@/lib/api'
-import { formatCurrency } from '@/lib/format'
+import {
+  lineDiscountOf,
+  lineSubtotal,
+  maxRedeemablePoints,
+  pointsDiscountOf,
+  pointsFor,
+  type VatMode,
+} from '@/features/shop/pricing'
+import { errorMessage, isNetworkError } from '@/lib/api'
+import { formatCurrency, formatNumber } from '@/lib/format'
+import { useNetworkStore } from '@/stores/network'
 import { toast } from '@/stores/toast'
+import { ordersApi } from '../api'
 import { cartTotals, useCartStore } from '../cart-store'
 import { type SaleResult, submitSale } from '../offline/queue'
 import { PAYMENT_METHODS, type PaymentMethod } from '../types'
@@ -42,32 +51,57 @@ export function CartPanel() {
   const [confirmingClear, setConfirmingClear] = useState(false)
   const [receipt, setReceipt] = useState<SaleResult | null>(null)
 
-  const totals = cartTotals(cart.lines, cart.billDiscount, shop)
+  const online = useNetworkStore((state) => state.online)
+
+  // Points as a discount: only for a chosen customer with points, in a shop that has set what
+  // a point is worth, and only while online, because the balance on this device may be stale.
+  const customer = customers.data?.find((candidate) => candidate.id === cart.customerId)
+  const canUsePoints = shop.pointValueBaht > 0 && !!customer && customer.loyaltyPoints > 0
+  const beforePoints = cartTotals(cart.lines, cart.billDiscount, shop)
+  const maxPoints =
+    canUsePoints && online
+      ? maxRedeemablePoints(
+          beforePoints.itemsTotal - beforePoints.billDiscount,
+          shop.pointValueBaht,
+          customer.loyaltyPoints,
+        )
+      : 0
+  const pointsUsed = Math.min(cart.pointsToRedeem, maxPoints)
+
+  const totals = cartTotals(
+    cart.lines,
+    cart.billDiscount,
+    shop,
+    pointsDiscountOf(pointsUsed, shop.pointValueBaht),
+  )
   const customerPoints = cart.customerId ? pointsFor(totals.total, shop.bahtPerPoint) : 0
   const isEmpty = cart.lines.length === 0
 
   const sale = useMutation({
     // Must run while the browser is offline too: that is when the sale gets queued.
     networkMode: 'always',
-    mutationFn: () =>
-      submitSale(
-        {
-          customerId: cart.customerId,
-          paymentMethod: cart.paymentMethod,
-          discountAmount: totals.billDiscount,
-          notes: null,
-          clientOrderId: cart.clientOrderId,
-          items: cart.lines.map((line) => ({
-            inventoryItemId: line.inventoryItemId,
-            quantity: line.quantity,
-            discount: lineDiscountOf(line),
-          })),
-        },
-        {
-          lines: cart.lines.map(({ name, quantity, unitPrice }) => ({ name, quantity, unitPrice })),
-          total: totals.total,
-        },
-      ),
+    mutationFn: async (): Promise<SaleResult> => {
+      const request = {
+        customerId: cart.customerId,
+        paymentMethod: cart.paymentMethod,
+        discountAmount: totals.billDiscount,
+        pointsRedeemed: pointsUsed,
+        notes: null,
+        clientOrderId: cart.clientOrderId,
+        items: cart.lines.map((line) => ({
+          inventoryItemId: line.inventoryItemId,
+          quantity: line.quantity,
+          discount: lineDiscountOf(line),
+        })),
+      }
+      // A bill that spends points is never kept on the device for later: only the server knows
+      // the balance, and it could refuse the bill after the customer has left.
+      if (pointsUsed > 0) return { kind: 'sent', order: await ordersApi.create(request) }
+      return submitSale(request, {
+        lines: cart.lines.map(({ name, quantity, unitPrice }) => ({ name, quantity, unitPrice })),
+        total: totals.total,
+      })
+    },
     onSuccess: (result) => {
       cart.clear()
       setReceipt(result)
@@ -75,10 +109,18 @@ export function CartPanel() {
         // A sale changes stock levels and the dashboard figures.
         void queryClient.invalidateQueries({ queryKey: INVENTORY_KEY })
         void queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY })
+        // And the customer's points, earned or used.
+        if (result.order.customerId) void queryClient.invalidateQueries({ queryKey: CUSTOMERS_KEY })
       }
     },
     // The cart (and its clientOrderId) is kept, so trying again cannot create a duplicate.
-    onError: (error) => toast.error(errorMessage(error, t('pos.checkoutFailed'))),
+    // Only a bill with points can fail for lack of a connection: the others are queued.
+    onError: (error) =>
+      toast.error(
+        isNetworkError(error)
+          ? t('pos.pointsNeedServer')
+          : errorMessage(error, t('pos.checkoutFailed')),
+      ),
   })
 
   return (
@@ -191,6 +233,14 @@ export function CartPanel() {
               <dd>-{formatCurrency(totals.lineDiscounts + totals.billDiscount)}</dd>
             </div>
           )}
+          {totals.pointsDiscount > 0 && (
+            <div className="flex justify-between">
+              <dt className="text-muted">
+                {t('pos.pointsDiscount', { points: formatNumber(pointsUsed) })}
+              </dt>
+              <dd>-{formatCurrency(totals.pointsDiscount)}</dd>
+            </div>
+          )}
           {shop.vatMode === 'Exclusive' && (
             <div className="flex justify-between">
               <dt className="text-muted">{taxLabel(shop.vatMode, shop.vatRatePercent)}</dt>
@@ -258,6 +308,32 @@ export function CartPanel() {
           ))}
         </Select>
 
+        {canUsePoints && (
+          <Input
+            label={t('pos.usePoints')}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={maxPoints}
+            step={1}
+            placeholder="0"
+            disabled={isEmpty || maxPoints === 0}
+            hint={
+              online
+                ? t('pos.usePointsHint', {
+                    balance: formatNumber(customer.loyaltyPoints),
+                    max: formatNumber(maxPoints),
+                    value: formatCurrency(shop.pointValueBaht),
+                  })
+                : t('pos.usePointsOffline')
+            }
+            value={amountText(pointsUsed)}
+            onChange={(event) =>
+              cart.setPointsToRedeem(Math.min(event.target.valueAsNumber, maxPoints))
+            }
+          />
+        )}
+
         <Select
           label={t('pos.paymentMethod')}
           value={cart.paymentMethod}
@@ -320,6 +396,14 @@ export function CartPanel() {
               <>
                 <dt className="text-muted">{t('pos.billDiscount')}</dt>
                 <dd className="text-right">-{formatCurrency(receipt.order.discountAmount)}</dd>
+              </>
+            )}
+            {receipt.order.pointsRedeemed > 0 && (
+              <>
+                <dt className="text-muted">
+                  {t('pos.pointsDiscount', { points: formatNumber(receipt.order.pointsRedeemed) })}
+                </dt>
+                <dd className="text-right">-{formatCurrency(receipt.order.pointsDiscount)}</dd>
               </>
             )}
             {receipt.order.vatMode !== 'None' && (
