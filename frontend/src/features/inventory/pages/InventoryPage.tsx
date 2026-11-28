@@ -123,7 +123,21 @@ export function InventoryPage() {
       key: 'name',
       header: t('inventory.name'),
       sortable: true,
-      cell: (item) => <span className="font-medium">{item.name}</span>,
+      cell: (item) => (
+        <span className="flex items-center gap-3">
+          {item.imageUrl ? (
+            <img
+              src={item.imageUrl}
+              alt=""
+              loading="lazy"
+              className="size-10 shrink-0 rounded border border-border object-cover"
+            />
+          ) : (
+            <span className="size-10 shrink-0 rounded border border-dashed border-border" />
+          )}
+          <span className="font-medium">{item.name}</span>
+        </span>
+      ),
     },
     { key: 'sku', header: t('inventory.sku'), cell: (item) => item.sku },
     { key: 'barcode', header: t('inventory.barcode'), cell: (item) => item.barcode ?? '–' },

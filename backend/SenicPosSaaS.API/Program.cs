@@ -187,6 +187,10 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISalesReportService, SalesReportService>();
 builder.Services.AddScoped<IItemImportService, ItemImportService>();
+builder.Services.AddScoped<IItemImageService, ItemImageService>();
+// Uploaded pictures: a folder, which in production is a volume (deploy/docker-compose.yml).
+builder.Services.AddSingleton<IFileStorage>(sp => new SenicPosSaaS.Infrastructure.Storage.DiskFileStorage(
+    sp.GetRequiredService<IConfiguration>()["Storage:Path"] is { Length: > 0 } path ? path : Path.Combine(AppContext.BaseDirectory, "uploads")));
 builder.Services.AddSingleton<IItemImportReader, SenicPosSaaS.Infrastructure.Reports.ItemImportReader>();
 builder.Services.AddSingleton<ISalesReportWorkbook, SenicPosSaaS.Infrastructure.Reports.SalesReportWorkbook>();
 builder.Services.AddScoped<IPushSubscriptionService, PushSubscriptionService>();

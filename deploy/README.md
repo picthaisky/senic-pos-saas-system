@@ -193,6 +193,19 @@ docker start <container api> <container web>
 **ยังไม่รู้เวลาที่ใช้กับข้อมูลขนาดจริง** ให้ซ้อมอีกครั้งเมื่อมีข้อมูลจริงและจดเวลาไว้
 CI ซ้อมกู้คืนลงฐานข้อมูลเปล่าทุกครั้งที่รัน (job `stack`)
 
+### รูปสินค้า
+
+รูปที่ร้านอัปโหลดเก็บใน volume `uploads` ของ container `api` **ไม่อยู่ในไฟล์สำรองของฐานข้อมูล**
+
+- เมื่อตั้งปลายทางนอก server ตามหัวข้อถัดไป `backup-offsite` คัดลอกรูปไปที่โฟลเดอร์ `uploads` ใต้ปลายทางเดียวกันทุก 5 นาที รูปที่ถูกลบในแอปยังอยู่ที่ปลายทาง
+- ถ้าไม่ตั้งปลายทาง รูปมีอยู่บน server เครื่องเดียว ถ้าดิสก์เสีย สินค้ายังอยู่ครบจากไฟล์สำรองของฐานข้อมูล แต่รูปหาย ต้องอัปโหลดใหม่
+- กู้รูปกลับบน server ใหม่ (หลังสร้าง stack ด้วยตัวแปรชุดเดิม):
+
+```bash
+docker compose -p senicpos run --rm --entrypoint sh -v senicpos_uploads:/restore backup-offsite -c \
+  'rclone copy "offsite:$BACKUP_S3_BUCKET/$BACKUP_S3_PREFIX/uploads" /restore'
+```
+
 ### เก็บสำเนานอก server
 
 Container `backup-offsite` คัดลอกไฟล์ `.dump` ทุกไฟล์ไปยังที่เก็บแบบ S3 (AWS S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO และผู้ให้บริการอื่นที่ใช้ API เดียวกัน)

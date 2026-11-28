@@ -120,7 +120,12 @@
     "saved": "บันทึกสินค้าแล้ว",
     "deleted": "ลบสินค้าแล้ว",
     "deleteTitle": "ลบสินค้า",
-    "deleteConfirm": "ต้องการลบ “{{name}}” ใช่หรือไม่ การลบไม่สามารถย้อนกลับได้"
+    "deleteConfirm": "ต้องการลบ “{{name}}” ใช่หรือไม่ การลบไม่สามารถย้อนกลับได้",
+    "image": "รูปสินค้า",
+    "imageHint": "JPEG, PNG หรือ WebP ระบบย่อรูปให้ก่อนบันทึก",
+    "imageOf": "รูปของ {{name}}",
+    "removeImage": "ลบรูป",
+    "imageFailed": "บันทึกสินค้าแล้ว แต่บันทึกรูปไม่สำเร็จ กรุณาลองเพิ่มรูปอีกครั้ง"
   },
   "customers": {
     "addCustomer": "เพิ่มลูกค้า",
@@ -570,7 +575,9 @@
     "import_not_a_number": "{{column}} ต้องเป็นตัวเลขที่ไม่ติดลบ",
     "import_not_whole": "{{column}} ต้องเป็นจำนวนเต็มที่ไม่ติดลบ",
     "import_duplicate_sku": "SKU {{sku}} ซ้ำกับแถว {{row}}",
-    "import_duplicate_barcode": "บาร์โค้ด {{barcode}} ซ้ำกับแถว {{row}}"
+    "import_duplicate_barcode": "บาร์โค้ด {{barcode}} ซ้ำกับแถว {{row}}",
+    "image_type": "รูปต้องเป็นไฟล์ JPEG, PNG หรือ WebP",
+    "image_too_large": "รูปมีขนาดใหญ่เกิน {{megabytes}} MB"
   },
   "import": {
     "open": "นำเข้าจากไฟล์",

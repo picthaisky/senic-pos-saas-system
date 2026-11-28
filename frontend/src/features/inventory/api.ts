@@ -37,6 +37,20 @@ export const inventoryApi = {
 
   remove: (id: string) => api.delete<void>(`/inventory/${id}`),
 
+  /** Sets the item's picture (JPEG, PNG or WebP) and answers with the item. */
+  setImage: (id: string, picture: Blob) => {
+    const form = new FormData()
+    form.append('file', picture, 'picture')
+    return api
+      .post<InventoryItem>(`/inventory/${id}/image`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+
+  removeImage: (id: string) =>
+    api.delete<InventoryItem>(`/inventory/${id}/image`).then((r) => r.data),
+
   /**
    * Items from an .xlsx or .csv file. With `dryRun` the server only says what would happen.
    * Rejects with a coded 400 when the file itself cannot be used.

@@ -115,6 +115,7 @@ services:
     volumes:
       # Read-only: this service can never damage the local dumps.
       - db-backups:/backups:ro
+      - uploads:/uploads:ro
     networks:
       - internal
     environment:
@@ -145,6 +146,10 @@ services:
         while true; do
           # Only *.dump: a dump still being written has another name.
           if rclone copy /backups "$$dest" --include '*.dump' --stats-one-line -v; then
+            # Pictures of items go beside the dumps. Copied, never deleted there: a picture
+            # removed in the app stays in the off-site copy.
+            rclone copy /uploads "$$dest/uploads" --stats-one-line -v \
+              || echo "could not copy the pictures off-site" >&2
             touch /tmp/last-success
             if [ "$$BACKUP_OFFSITE_KEEP_DAYS" -gt 0 ]; then
               rclone delete "$$dest" --include '*.dump' --min-age "$$BACKUP_OFFSITE_KEEP_DAYS"d \
@@ -196,8 +201,11 @@ services:
       Push__PublicKey: ${PUSH_PUBLIC_KEY:-}
       Push__PrivateKey: ${PUSH_PRIVATE_KEY:-}
       Push__Subject: ${PUSH_SUBJECT:-}
+      # Pictures of items are kept in the "uploads" volume below.
+      Storage__Path: /app/uploads
     volumes:
       - api-logs:/app/logs
+      - uploads:/app/uploads
     networks:
       - internal
     # The image has its own HEALTHCHECK (GET /health); `web` waits for it below.
@@ -224,3 +232,5 @@ volumes:
   postgres-data:
   api-logs:
   db-backups:
+  # Pictures of items. Copied off the server by backup-offsite; not in the database dumps.
+  uploads:

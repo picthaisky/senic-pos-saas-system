@@ -22,6 +22,8 @@ server {
 
     # API and SignalR hubs
     location /api/ {
+        # The largest upload the API takes is a 5 MB file of items; nginx alone would stop at 1 MB.
+        client_max_body_size 6m;
         proxy_pass ${API_UPSTREAM};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

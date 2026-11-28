@@ -280,6 +280,37 @@ if (!credentials) {
       wrong.status === 200 && wrong.json?.applied === false && wrong.json?.errorCount === 2 && wrong.json.errors.every((e) => e.row === 3) && afterWrong.json?.total === 2,
       `status ${wrong.status}, errors ${wrong.json?.errorCount}`,
     )
+    // About 2 MB: more than nginx lets through unless it is told to (its own limit is 1 MB).
+    const long = 'x'.repeat(190)
+    let big = 'sku,name,description,price\n'
+    for (let n = 0; n < 4500; n++) big += `BIG-${stamp}-${n},${long} ${n},${long},1\n`
+    const bigCheck = await upload(big, '?dryRun=true')
+    check('a file of items larger than 1 MB gets through the web server', bigCheck.status === 200 && bigCheck.json?.totalRows === 4500 && bigCheck.json?.errorCount === 0, `status ${bigCheck.status}, ${Math.round(big.length / 1024)} KB`)
+
+    // A picture for an item: set by a manager, then readable by anyone who has its address.
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0))
+    const pictureForm = new FormData()
+    pictureForm.append('file', new Blob([png], { type: 'image/png' }), 'picture.png')
+    const authorized = { Authorization: `Bearer ${token}`, ...(cookie ? { Cookie: cookie } : {}) }
+    const pictured = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'POST', body: pictureForm, headers: authorized })
+    const picturedItem = await pictured.json().catch(() => undefined)
+    const shown = picturedItem?.imageUrl ? await fetch(base + picturedItem.imageUrl) : undefined
+    const shownBytes = shown ? new Uint8Array(await shown.arrayBuffer()) : new Uint8Array()
+    check(
+      'an item gets a picture, served without signing in',
+      pictured.status === 200 && /^\/api\/images\/[0-9a-f-]+\/[0-9a-f]{32}\.png$/.test(picturedItem?.imageUrl ?? '') && shown?.status === 200 && shown.headers.get('content-type') === 'image/png' && shownBytes.length === png.length,
+      `upload ${pictured.status}, read ${shown?.status}`,
+    )
+    const notPicture = new FormData()
+    notPicture.append('file', new Blob(['<script>alert(1)</script>'], { type: 'image/png' }), 'picture.png')
+    const refusedPicture = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'POST', body: notPicture, headers: authorized })
+    const unpictured = await fetch(`${base}/api/inventory/${item.json?.id}/image`, { method: 'DELETE', headers: authorized })
+    const gone = picturedItem?.imageUrl ? await fetch(base + picturedItem.imageUrl) : undefined
+    check(
+      'a file that is not a picture is refused, and a removed picture is gone',
+      refusedPicture.status === 400 && unpictured.status === 200 && gone?.status === 404,
+      `refused ${refusedPicture.status}, removed ${unpictured.status}, read ${gone?.status}`,
+    )
 
     // A throw-away member of staff: added, signs in, is deactivated, can no longer sign in.
     const staff = {

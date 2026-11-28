@@ -121,7 +121,12 @@
     "saved": "Item saved",
     "deleted": "Item deleted",
     "deleteTitle": "Delete item",
-    "deleteConfirm": "Delete “{{name}}”? This cannot be undone."
+    "deleteConfirm": "Delete “{{name}}”? This cannot be undone.",
+    "image": "Picture",
+    "imageHint": "JPEG, PNG or WebP. The picture is made smaller before it is saved.",
+    "imageOf": "Picture of {{name}}",
+    "removeImage": "Remove the picture",
+    "imageFailed": "The item was saved, but its picture was not. Try adding the picture again."
   },
   "customers": {
     "addCustomer": "Add customer",
@@ -578,7 +583,9 @@
     "import_not_a_number": "{{column}} must be a number that is not negative",
     "import_not_whole": "{{column}} must be a whole number that is not negative",
     "import_duplicate_sku": "SKU {{sku}} is also on row {{row}}",
-    "import_duplicate_barcode": "Barcode {{barcode}} is also on row {{row}}"
+    "import_duplicate_barcode": "Barcode {{barcode}} is also on row {{row}}",
+    "image_type": "The picture must be a JPEG, PNG or WebP file",
+    "image_too_large": "The picture is larger than {{megabytes}} MB"
   },
   "import": {
     "open": "Import from a file",

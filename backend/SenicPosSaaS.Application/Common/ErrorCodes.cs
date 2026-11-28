@@ -75,6 +75,11 @@ public static class ErrorCodes
     /// <summary>params: barcode, row</summary>
     public const string ImportDuplicateBarcode = "import_duplicate_barcode";
 
+    // Item pictures
+    public const string ImageType = "image_type";
+    /// <summary>params: megabytes</summary>
+    public const string ImageTooLarge = "image_too_large";
+
     // Push notifications
     public const string PushNotConfigured = "push_not_configured";
     public const string PushEndpointUnknown = "push_endpoint_unknown";

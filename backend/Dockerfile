@@ -37,6 +37,9 @@ COPY --from=publish /app/publish .
 # Create logs directory
 RUN mkdir -p /app/logs && chmod 777 /app/logs
 
+# Uploaded pictures; a volume is mounted here (deploy/docker-compose.yml)
+RUN mkdir -p /app/uploads && chmod 777 /app/uploads
+
 # Expose ports
 EXPOSE 8080
 EXPOSE 8081

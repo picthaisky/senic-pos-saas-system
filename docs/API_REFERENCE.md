@@ -162,6 +162,9 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 | GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✅    |
 | POST   | `/api/inventory`                                       | Admin, Owner | ✅    |
 | POST   | `/api/inventory/import?dryRun=`                        | Admin, Owner | ✅    |
+| POST   | `/api/inventory/{id}/image`                            | Admin, Owner | ✅    |
+| DELETE | `/api/inventory/{id}/image`                            | Admin, Owner | ✅    |
+| GET    | `/api/images/{tenantId}/{name}`                        | ไม่ต้อง login  | ✅    |
 | PUT    | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 | DELETE | `/api/inventory/{id}`                                  | Admin, Owner | ✅    |
 
@@ -188,6 +191,16 @@ Frontend เปลี่ยนมาใช้ชื่อ field ของ backen
 
 `GET /api/inventory/categories` คืน array ของชื่อหมวดหมู่ที่มีใช้อยู่ เรียงตามตัวอักษร ใช้กับตัวกรองและคำแนะนำในฟอร์ม
 รายการสินค้ารองรับการแบ่งหน้า ดูหัวข้อ "การแบ่งหน้า" ในข้อ 1
+
+### รูปสินค้า ✅
+
+- `POST /api/inventory/{id}/image` รับ `multipart/form-data` ที่มีช่อง `file` เป็นรูป JPEG, PNG หรือ WebP ขนาดไม่เกิน 2 MB ตอบเป็น `InventoryItem` ที่ `imageUrl` เป็นที่อยู่ของรูปใหม่ เช่น `/api/images/{tenantId}/3f2c…9a.jpg`
+- ชนิดของรูปตัดสินจากเนื้อหาของไฟล์ ไม่ใช่จากชื่อหรือ `Content-Type` ที่ส่งมา ไฟล์ที่ไม่ใช่รูปสามชนิดนี้ (รวม SVG และ HTML) ได้ `400` `image_type` และไฟล์ที่ใหญ่เกินได้ `400` `image_too_large`
+- รูปใหม่ได้ชื่อใหม่ทุกครั้ง และไฟล์ของรูปเดิมถูกลบ `DELETE /api/inventory/{id}/image` ลบรูปและตั้ง `imageUrl` เป็น `null`
+- `GET /api/images/{tenantId}/{name}` **ไม่ต้อง login** เพราะ `<img>` ส่ง token ไม่ได้ ชื่อรูปเป็นเลขสุ่ม 32 หลักที่เดาไม่ได้ และรูปสินค้าไม่ใช่ข้อมูลลับ ตอบพร้อม `Cache-Control: immutable` และ `X-Content-Type-Options: nosniff`
+- Frontend ย่อรูปให้ด้านยาวไม่เกิน 800 พิกเซลและแปลงเป็น JPEG ก่อนส่ง server ไม่แก้ไขรูป
+- รูปเก็บบนดิสก์ของ server (volume `uploads`) ไม่อยู่ในไฟล์สำรองของฐานข้อมูล ดู `deploy/README.md`
+- ข้อจำกัด: การลบสินค้าไม่ลบไฟล์รูปของสินค้านั้น และรูปไม่ถูกเก็บไว้ใช้ตอนออฟไลน์
 
 ### นำเข้าสินค้าจากไฟล์ ✅
 

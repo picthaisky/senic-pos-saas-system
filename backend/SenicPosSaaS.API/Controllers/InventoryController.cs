@@ -19,14 +19,52 @@ public class InventoryController : TenantControllerBase
     private readonly IInventoryItemService _inventoryService;
     private readonly IItemImportService _importService;
     private readonly IItemImportReader _importReader;
+    private readonly IItemImageService _imageService;
     private readonly ILogger<InventoryController> _logger;
 
-    public InventoryController(IInventoryItemService inventoryService, IItemImportService importService, IItemImportReader importReader, ILogger<InventoryController> logger)
+    public InventoryController(IInventoryItemService inventoryService, IItemImportService importService, IItemImportReader importReader, IItemImageService imageService, ILogger<InventoryController> logger)
     {
+        _imageService = imageService;
         _inventoryService = inventoryService;
         _importService = importService;
         _importReader = importReader;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Sets the item's picture from a JPEG, PNG or WebP file (form field "file", at most 2 MB)
+    /// and answers with the item; its <c>imageUrl</c> is the new picture's address.
+    /// </summary>
+    [HttpPost("{id:guid}/image")]
+    [Authorize(Roles = Roles.Managers)]
+    [RequestSizeLimit(ItemImageService.MaxBytes + 64 * 1024)]
+    [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<InventoryItemDto>> SetImage(Guid id, IFormFile? file, CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.ImageType, "The picture must be a JPEG, PNG or WebP file.");
+        if (file.Length > ItemImageService.MaxBytes)
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.ImageTooLarge, "The picture is too large.", ("megabytes", (object?)(ItemImageService.MaxBytes / 1024 / 1024)));
+
+        using var buffer = new MemoryStream((int)file.Length);
+        await file.CopyToAsync(buffer, cancellationToken);
+        if (!await _imageService.SetAsync(TenantId, id, buffer.ToArray(), cancellationToken))
+            return NotFound();
+        return Ok(await _inventoryService.GetInventoryItemByIdAsync(id, cancellationToken));
+    }
+
+    /// <summary>Removes the item's picture.</summary>
+    [HttpDelete("{id:guid}/image")]
+    [Authorize(Roles = Roles.Managers)]
+    [ProducesResponseType(typeof(InventoryItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<InventoryItemDto>> RemoveImage(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await _imageService.RemoveAsync(TenantId, id, cancellationToken))
+            return NotFound();
+        return Ok(await _inventoryService.GetInventoryItemByIdAsync(id, cancellationToken));
     }
 
     /// <summary>

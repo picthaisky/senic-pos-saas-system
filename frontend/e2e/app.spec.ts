@@ -452,6 +452,55 @@ test('imports items from a file, after showing what is wrong with a bad one', as
   await expect(page.getByRole('row', { name: new RegExp(`นำเข้า ${id}`) })).toHaveCount(2)
 })
 
+test('gives an item a picture, which the till then shows', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '45', quantity: '3' })
+  await page.getByRole('searchbox', { name: 'ค้นหา', exact: true }).fill(item.name)
+  await page.getByRole('button', { name: `แก้ไข ${item.name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'แก้ไขสินค้า' })
+
+  // A real picture, larger than the app keeps: 1600 x 1200, drawn here.
+  const big = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1600
+    canvas.height = 1200
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#2563eb'
+    context.fillRect(0, 0, 1600, 1200)
+    context.fillStyle = '#ffffff'
+    context.fillRect(400, 300, 800, 600)
+    const blob = await new Promise<Blob>((resolve) =>
+      canvas.toBlob((b) => resolve(b!), 'image/png'),
+    )
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  })
+  await dialog
+    .getByLabel('รูปสินค้า')
+    .setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(big) })
+  await expect(dialog.getByRole('img')).toBeVisible()
+  await shot(page, '19-item-picture')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกสินค้าแล้ว')).toBeVisible()
+
+  // The list shows it. It was made smaller and turned into a JPEG before it was sent.
+  const thumbnail = page.getByRole('row', { name: new RegExp(item.name) }).locator('img')
+  await expect(thumbnail).toHaveAttribute('src', /^\/api\/images\/[0-9a-f-]+\/[0-9a-f]{32}\.jpg$/)
+  const size = await thumbnail.evaluate(async (img: HTMLImageElement) => {
+    await img.decode()
+    return [img.naturalWidth, img.naturalHeight]
+  })
+  expect(size).toEqual([800, 600])
+
+  // The till shows the same picture on the item's card.
+  await page.getByRole('link', { name: 'ขายหน้าร้าน' }).click()
+  const search = page.getByLabel('ค้นหาสินค้า')
+  await search.fill(item.name)
+  await search.press('Enter')
+  const card = page.getByRole('button', { name: new RegExp(item.name) }).first()
+  await expect(card.locator('img')).toHaveAttribute('src', /\.jpg$/)
+  await shot(page, '19b-pos-picture')
+})
+
 test('updates another open window when a sale happens', async ({ page, context }) => {
   await signIn(page)
   const item = await addItem(page, { price: '100', quantity: '6', minimumStock: '5' })

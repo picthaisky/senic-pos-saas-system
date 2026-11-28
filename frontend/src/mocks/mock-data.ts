@@ -656,6 +656,31 @@ export const dataRoutes: MockRoute[] = [
   ],
   [
     'POST',
+    '/inventory/:id/image',
+    ({ params, body }) => {
+      const item = items.find((candidate) => candidate.id === params.id)
+      if (!item) return notFound
+      const file = (body as FormData).get('file') as File
+      // The mock cannot look inside the file: only its declared type is checked.
+      if (file.type && !/^image\/(jpeg|png|webp)$/.test(file.type)) {
+        return problem(400, 'image_type', 'The picture must be a JPEG, PNG or WebP file.')
+      }
+      item.imageUrl = `/api/images/mock/${uuid().replaceAll('-', '')}.jpg`
+      return { status: 200, data: { ...item } }
+    },
+  ],
+  [
+    'DELETE',
+    '/inventory/:id/image',
+    ({ params }) => {
+      const item = items.find((candidate) => candidate.id === params.id)
+      if (!item) return notFound
+      item.imageUrl = null
+      return { status: 200, data: { ...item } }
+    },
+  ],
+  [
+    'POST',
     '/inventory/import',
     // The mock does not read the file: its name decides the answer.
     ({ body, query }) => {
