@@ -68,9 +68,49 @@ public class ItemImageApiTests : IClassFixture<ApiFactory>
         var without = await ItemOfAsync(await owner.DeleteAsync($"/api/inventory/{item.Id}/image"));
         without.ImageUrl.Should().BeNull();
         (await anyone.GetAsync(withWebP.ImageUrl)).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        Directory.EnumerateFiles(_factory.UploadsPath, "*", SearchOption.AllDirectories).Should().BeEmpty();
         // Removing twice is not an error.
         (await owner.DeleteAsync($"/api/inventory/{item.Id}/image")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DeletingAnItem_TakesItsPictureAlong_ButASoldItemStays()
+    {
+        var owner = await _factory.SignInAsync("owner@a.test");
+        var anyone = await _factory.AnonymousAsync();
+        var unsold = await _factory.AddItemAsync(ApiFactory.TenantA, "Never sold", 10, 1);
+        var sold = await _factory.AddItemAsync(ApiFactory.TenantA, "Sold once", 10, 5);
+        var unsoldPicture = (await ItemOfAsync(await owner.PostAsync($"/api/inventory/{unsold.Id}/image", Upload(Png)))).ImageUrl!;
+        var soldPicture = (await ItemOfAsync(await owner.PostAsync($"/api/inventory/{sold.Id}/image", Upload(Jpeg, "p.jpg", "image/jpeg")))).ImageUrl!;
+        (await owner.PostAsJsonAsync("/api/orders", new { paymentMethod = "Cash", items = new[] { new { inventoryItemId = sold.Id, quantity = 1 } } })).EnsureSuccessStatusCode();
+
+        (await owner.DeleteAsync($"/api/inventory/{unsold.Id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await anyone.GetAsync(unsoldPicture)).StatusCode.Should().Be(HttpStatusCode.NotFound, "the file goes with the item");
+
+        // A bill still points at this item: it is refused with an explanation, not a server error.
+        var refused = await owner.DeleteAsync($"/api/inventory/{sold.Id}");
+        refused.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString().Should().Be(ErrorCodes.ItemHasSales);
+        (await anyone.GetAsync(soldPicture)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ItemOfAsync(await owner.GetAsync($"/api/inventory/{sold.Id}"))).ImageUrl.Should().Be(soldPicture);
+    }
+
+    [Fact]
+    public async Task APictureAddress_CannotBeTypedIn_OnlyUploaded()
+    {
+        var owner = await _factory.SignInAsync("owner@a.test");
+        var victim = await _factory.AddItemAsync(ApiFactory.TenantA, "Has a picture", 10, 1);
+        var thief = await _factory.AddItemAsync(ApiFactory.TenantA, "Borrows it", 10, 1);
+        var picture = (await ItemOfAsync(await owner.PostAsync($"/api/inventory/{victim.Id}/image", Upload(Png)))).ImageUrl!;
+
+        // Pointing another item at the same picture is ignored ...
+        (await ItemOfAsync(await owner.PutAsJsonAsync($"/api/inventory/{thief.Id}", new { name = "Borrows it", imageUrl = picture }))).ImageUrl.Should().BeNull();
+        var created = await owner.PostAsJsonAsync("/api/inventory", new { sku = $"IMG-{Guid.NewGuid():N}"[..12], name = "New with address", price = 1, imageUrl = "https://example.com/x.png" });
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await created.Content.ReadFromJsonAsync<InventoryItemDto>(ApiFactory.Json))!.ImageUrl.Should().BeNull();
+
+        // ... so deleting that item cannot take the picture away from its owner.
+        (await owner.DeleteAsync($"/api/inventory/{thief.Id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await owner.GetAsync(picture)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

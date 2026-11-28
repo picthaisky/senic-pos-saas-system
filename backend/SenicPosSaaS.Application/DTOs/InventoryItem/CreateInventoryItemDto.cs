@@ -37,5 +37,6 @@ public class CreateInventoryItemDto
     public string? Category { get; set; }
 
     [StringLength(500)]
+    /// <summary>Ignored. Kept so that requests of older clients still bind; a picture is set with POST /api/inventory/{id}/image.</summary>
     public string? ImageUrl { get; set; }
 }

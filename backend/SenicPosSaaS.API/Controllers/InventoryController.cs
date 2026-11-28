@@ -196,6 +196,7 @@ public class InventoryController : TenantControllerBase
     [Authorize(Roles = Roles.Managers)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteItem(Guid id, CancellationToken cancellationToken)
     {
         var result = await _inventoryService.DeleteInventoryItemAsync(id, cancellationToken);

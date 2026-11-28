@@ -1,9 +1,10 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import i18n from '@/i18n'
+import { inventoryApi } from '@/features/inventory/api'
 import { useCartStore } from '@/features/pos/cart-store'
 import { DEFAULT_SHOP_SETTINGS } from '@/features/shop/api'
 import { mockShopSettings } from '@/mocks/mock-data'
-import { renderApp } from '@/test/render-app'
+import { renderApp, signIn } from '@/test/render-app'
 
 // Screen-level tests against the in-memory mock API (src/mocks/mock-data.ts), whose seed data
 // these tests rely on: "น้ำดื่ม 600 มล." costs ฿10 with barcode 8850000000001 and 120 in stock;
@@ -46,18 +47,36 @@ describe('inventory page', () => {
     expect(await screen.findByText('ปากกาลูกลื่น')).toBeInTheDocument()
   })
 
-  it('deletes an item after confirmation', async () => {
+  it('deletes an item that was never sold, and says why a sold one stays', async () => {
+    signIn()
+    // Sorts first, so it is on the first page of the list.
+    await inventoryApi.create({
+      sku: 'NEVER-SOLD',
+      name: 'กระดาษห่อของขวัญ',
+      barcode: null,
+      category: null,
+      price: 5,
+      cost: 2,
+      quantity: 0,
+      minimumStock: 0,
+    })
     renderApp('/inventory')
-    await screen.findByText('ขนมปังแผ่น')
+    await screen.findByText('กระดาษห่อของขวัญ')
 
-    fireEvent.click(
-      screen.getByRole('button', { name: t('inventory.deleteNamed', { name: 'ขนมปังแผ่น' }) }),
-    )
-    const dialog = within(screen.getByRole('dialog', { name: t('inventory.deleteTitle') }))
-    fireEvent.click(dialog.getByRole('button', { name: t('common.delete') }))
+    async function remove(name: string) {
+      fireEvent.click(screen.getByRole('button', { name: t('inventory.deleteNamed', { name }) }))
+      const dialog = within(screen.getByRole('dialog', { name: t('inventory.deleteTitle') }))
+      fireEvent.click(dialog.getByRole('button', { name: t('common.delete') }))
+    }
 
+    // The seeded sales include this item: bills still point at it.
+    await remove('ขนมปังแผ่น')
+    expect(await screen.findByText(/เคยถูกขายแล้ว จึงลบไม่ได้/)).toBeInTheDocument()
+    expect(screen.getByText('ขนมปังแผ่น')).toBeInTheDocument()
+
+    await remove('กระดาษห่อของขวัญ')
     expect(await screen.findByText(t('inventory.deleted'))).toBeInTheDocument()
-    await vi.waitFor(() => expect(screen.queryByText('ขนมปังแผ่น')).not.toBeInTheDocument())
+    await vi.waitFor(() => expect(screen.queryByText('กระดาษห่อของขวัญ')).not.toBeInTheDocument())
   })
 })
 

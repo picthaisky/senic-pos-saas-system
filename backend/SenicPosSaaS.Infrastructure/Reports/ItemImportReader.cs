@@ -65,11 +65,30 @@ public class ItemImportReader : IItemImportReader
         return rows;
     }
 
+    /// <summary>
+    /// UTF-8 when the bytes are valid UTF-8 (what the app exports, and "CSV UTF-8" in Excel).
+    /// Otherwise Windows-874, which is what plain "CSV" means in Excel on a Thai Windows: Thai
+    /// text in that encoding is never valid UTF-8, so the two cannot be confused.
+    /// </summary>
+    private static string Decode(byte[] bytes)
+    {
+        try
+        {
+            var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+            return text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
+        }
+        catch (DecoderFallbackException)
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(874).GetString(bytes);
+        }
+    }
+
     private static List<IReadOnlyList<string?>> ReadCsv(Stream file)
     {
-        // Strict UTF-8: a file in another encoding is refused instead of imported as garbage.
-        using var reader = new StreamReader(file, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true));
-        var text = reader.ReadToEnd();
+        using var buffer = new MemoryStream();
+        file.CopyTo(buffer);
+        var text = Decode(buffer.ToArray());
 
         var rows = new List<IReadOnlyList<string?>>();
         var row = new List<string?>();

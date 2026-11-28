@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth'
 import { renderApp, signIn } from '@/test/render-app'
 import { useCartStore } from '../cart-store'
 import { offlineDb, type QueuedOrder } from './db'
+import { refusalOf } from './db'
 import { discardOrder, loadQueue, retryOrder, syncQueue, useOrderQueue } from './queue'
 import { useStorageProtection } from './storage'
 
@@ -156,6 +157,14 @@ describe('order queue', () => {
     const [failed] = useOrderQueue.getState().orders
     expect(failed.status).toBe('failed')
     expect(failed.error).toContain('มีไม่พอ')
+    // The reason is kept as a code too, so it follows the language of whoever reads it later.
+    expect(failed.errorCode).toBe('insufficient_stock')
+    expect(refusalOf(failed)).toContain('มีไม่พอ')
+    await i18n.changeLanguage('en')
+    expect(refusalOf(failed)).toContain('Not enough')
+    await i18n.changeLanguage('th')
+    // A bill refused by an older version of the app has only the text.
+    expect(refusalOf({ ...failed, errorCode: undefined })).toBe(failed.error)
 
     // A later automatic sync leaves it alone ...
     expect(await syncQueue()).toEqual({ sent: 0, failed: 0 })

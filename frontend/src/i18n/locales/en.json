@@ -542,7 +542,7 @@
     "grossProfit": "Gross profit",
     "margin": "{{percent}}% of sales",
     "profitNote": "Gross profit = sales without VAT and after every discount, less the cost of the goods when they were sold. The shop's other expenses are not taken off.",
-    "withoutCost": "Sales of {{amount}} in this period are from bills made before costs were recorded, so they are in neither the cost nor the gross profit."
+    "withoutCost": "Sales of {{amount}} in this period are in neither the cost nor the gross profit: they are of items whose cost was never entered (a cost of 0), or of bills made before costs were recorded."
   },
   "errors": {
     "customer_not_found": "The chosen customer was not found. Choose again.",
@@ -585,7 +585,8 @@
     "import_duplicate_sku": "SKU {{sku}} is also on row {{row}}",
     "import_duplicate_barcode": "Barcode {{barcode}} is also on row {{row}}",
     "image_type": "The picture must be a JPEG, PNG or WebP file",
-    "image_too_large": "The picture is larger than {{megabytes}} MB"
+    "image_too_large": "The picture is larger than {{megabytes}} MB",
+    "item_has_sales": "This item has been sold, so it cannot be deleted. Make it inactive instead."
   },
   "import": {
     "open": "Import from a file",

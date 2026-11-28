@@ -116,6 +116,19 @@ export function errorMessage(error: unknown, fallback: string): string {
   return (i18n.language === 'en' && (problem?.detail || problem?.title)) || fallback
 }
 
+/**
+ * The sentence for a server error code in the current language, or null when the code is
+ * unknown. For errors that are kept and shown later (a bill refused while syncing).
+ */
+export function messageForCode(
+  code: string | undefined,
+  params?: ProblemDetails['params'],
+): string | null {
+  if (!code) return null
+  const key = `errors.${code}`
+  return i18n.exists(key) ? String(i18n.t(key as never, (params ?? {}) as never)) : null
+}
+
 export function getStatus(error: unknown): number | undefined {
   return axios.isAxiosError(error) ? error.response?.status : undefined
 }

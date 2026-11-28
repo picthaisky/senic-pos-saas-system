@@ -499,6 +499,27 @@ test('gives an item a picture, which the till then shows', async ({ page }) => {
   const card = page.getByRole('button', { name: new RegExp(item.name) }).first()
   await expect(card.locator('img')).toHaveAttribute('src', /\.jpg$/)
   await shot(page, '19b-pos-picture')
+
+  // The picture has been shown once, so the device keeps it: the till still has it offline.
+  await page.evaluate(() => navigator.serviceWorker.ready)
+  await page.reload()
+  await search.fill(item.name)
+  await search.press('Enter')
+  await expect(card.locator('img')).toHaveAttribute('src', /.jpg$/)
+  await page.context().setOffline(true)
+  try {
+    await page.reload()
+    await page.getByLabel('ค้นหาสินค้า').fill(item.name)
+    await page.getByLabel('ค้นหาสินค้า').press('Enter')
+    const offlineCard = page.getByRole('button', { name: new RegExp(item.name) }).first()
+    const shown = await offlineCard.locator('img').evaluate(async (img: HTMLImageElement) => {
+      await img.decode()
+      return img.naturalWidth
+    })
+    expect(shown).toBe(800)
+  } finally {
+    await page.context().setOffline(false)
+  }
 })
 
 test('updates another open window when a sale happens', async ({ page, context }) => {

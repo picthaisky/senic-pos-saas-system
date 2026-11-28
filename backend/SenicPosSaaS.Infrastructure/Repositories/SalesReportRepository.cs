@@ -80,11 +80,14 @@ public class SalesReportRepository : ISalesReportRepository
                 Amount = g.Sum(oi => oi.Subtotal),
                 // A line's share of what its bill earned without VAT: (net - tax) is the bill after
                 // every discount, and the lines share it by their amounts.
-                CostedRevenue = g.Sum(oi => oi.UnitCost == null || oi.Order!.TotalAmount == 0
+                // A cost of 0 is a cost nobody entered (it is what a new item starts with), not
+                // goods that were free: counting it would show the whole price as profit. Such
+                // lines are left out, which can only understate the profit.
+                CostedRevenue = g.Sum(oi => oi.UnitCost == null || oi.UnitCost == 0 || oi.Order!.TotalAmount == 0
                     ? 0
                     : oi.Subtotal * (oi.Order.NetAmount - oi.Order.TaxAmount) / oi.Order.TotalAmount),
                 Cost = g.Sum(oi => oi.UnitCost == null ? 0 : oi.UnitCost.Value * oi.Quantity),
-                CostedQuantity = g.Sum(oi => oi.UnitCost == null ? 0 : oi.Quantity)
+                CostedQuantity = g.Sum(oi => oi.UnitCost == null || oi.UnitCost == 0 ? 0 : oi.Quantity)
             })
             .ToListAsync(cancellationToken);
         return rows.Select(r => new ItemSales(r.InventoryItemId, r.Name, r.Category, r.Quantity, r.Amount, r.CostedRevenue, r.Cost, r.CostedQuantity)).ToList();

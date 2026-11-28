@@ -75,6 +75,9 @@ public static class ErrorCodes
     /// <summary>params: barcode, row</summary>
     public const string ImportDuplicateBarcode = "import_duplicate_barcode";
 
+    // Items
+    public const string ItemHasSales = "item_has_sales";
+
     // Item pictures
     public const string ImageType = "image_type";
     /// <summary>params: megabytes</summary>

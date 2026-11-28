@@ -235,6 +235,9 @@ if (!credentials) {
       `status ${sold.status}, bills ${sold.json?.totals?.orderCount}`,
     )
 
+    const deleteSold = await call('DELETE', `/api/inventory/${item.json?.id}`)
+    check('an item that was sold cannot be deleted, and the answer says why', deleteSold.status === 409 && deleteSold.json?.code === 'item_has_sales', `status ${deleteSold.status}`)
+
     const cancel = await call('POST', `/api/orders/${walkIn.json?.id}/cancel`)
     const afterCancel = await call('GET', `/api/inventory/${item.json?.id}`)
     check('cancelling returns the stock', cancel.status === 200 && afterCancel.json?.quantity === 3, `quantity ${afterCancel.json?.quantity}`)

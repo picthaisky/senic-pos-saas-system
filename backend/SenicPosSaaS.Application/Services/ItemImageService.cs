@@ -84,14 +84,10 @@ public class ItemImageService : IItemImageService
         return true;
     }
 
-    /// <summary>Only a picture this shop uploaded is deleted; any other address is left alone.</summary>
     private async Task DeleteFileOfAsync(Guid tenantId, string? url, CancellationToken cancellationToken)
     {
-        var prefix = ItemImages.Url(tenantId, string.Empty);
-        if (url == null || !url.StartsWith(prefix, StringComparison.Ordinal)) return;
-        var name = url[prefix.Length..];
-        if (ItemImages.IsValidName(name))
-            await _storage.DeleteAsync(ItemImages.Key(tenantId, name), cancellationToken);
+        if (ItemImages.KeyOf(tenantId, url) is { } key)
+            await _storage.DeleteAsync(key, cancellationToken);
     }
 }
 
@@ -100,6 +96,18 @@ public static class ItemImages
 {
     public static string Url(Guid tenantId, string name) => $"/api/images/{tenantId:D}/{name}";
     public static string Key(Guid tenantId, string name) => $"{tenantId:D}/{name}";
+
+    /// <summary>
+    /// The storage key of a picture this shop uploaded, from its address; null for any other
+    /// address, so nothing outside the shop's own pictures can ever be deleted by it.
+    /// </summary>
+    public static string? KeyOf(Guid tenantId, string? url)
+    {
+        var prefix = Url(tenantId, string.Empty);
+        if (url == null || !url.StartsWith(prefix, StringComparison.Ordinal)) return null;
+        var name = url[prefix.Length..];
+        return IsValidName(name) ? Key(tenantId, name) : null;
+    }
 
     /// <summary>32 hex digits and a known extension: nothing that could leave the folder.</summary>
     public static bool IsValidName(string name) =>

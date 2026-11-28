@@ -176,6 +176,24 @@ public class ReportsApiTests : IClassFixture<ApiFactory>
         using var partlyWorkbook = new XLWorkbook(new MemoryStream(await partlyFile.Content.ReadAsByteArrayAsync()));
         partlyWorkbook.Worksheet("By item").Cell(4, 5).IsEmpty().Should().BeTrue();
         partlyWorkbook.Worksheet("Summary").Cell(13, 1).GetString().Should().Be("Sales without a recorded cost");
+
+        // An item whose cost nobody entered has a cost of 0. Selling it is not pure profit: the
+        // sale is reported beside the profit, like a line without a cost.
+        var uncosted = await _factory.AddItemAsync(ApiFactory.TenantA, "Report no cost", 107, 10);
+        await _factory.WithDbAsync(async db =>
+        {
+            (await db.InventoryItems.IgnoreQueryFilters().SingleAsync(i => i.Id == uncosted.Id)).Cost = 0;
+            await db.SaveChangesAsync();
+        });
+        await SellAsync(owner, "Cash", 0, (uncosted.Id, 1, 0));
+        var withUncosted = await ReadAsync<SalesReportDto>(await owner.GetAsync($"/api/reports/sales?from={Iso(yesterday)}&to={Iso(Today)}"));
+        withUncosted.Totals.GrossProfit.Should().Be(154.49m, "the sale without a cost adds no profit");
+        withUncosted.Totals.Cost.Should().Be(210);
+        withUncosted.Totals.SalesWithoutCost.Should().Be(114.02m, "14.02 from before and 107 less 7 of VAT");
+        var uncostedRow = withUncosted.ByItem.Single(i => i.Name == "Report no cost");
+        uncostedRow.Amount.Should().Be(107);
+        uncostedRow.Cost.Should().BeNull();
+        uncostedRow.Profit.Should().BeNull();
     }
 
     [Fact]

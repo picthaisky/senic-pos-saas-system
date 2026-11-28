@@ -102,6 +102,8 @@ Workflow นี้ไม่แก้ stack ที่มีอยู่แล้�
 
 ## ขั้นที่ 4: ตั้งค่าการ deploy อัตโนมัติ
 
+ถ้ายังไม่ได้ตั้ง secret ของ Portainer เลย workflow `Deploy` จะ build และ push image ตามปกติ แล้วจบด้วยคำเตือน "Not deployed" โดยไม่ล้ม run ที่เป็นสีแดงบน `main` จึงหมายถึงมีบางอย่างเสียจริงเสมอ
+
 ใน environment `production` ของ GitHub เลือกแบบใดแบบหนึ่ง
 
 | แบบ             | ต้องตั้ง                                       | ผล                                                                          |

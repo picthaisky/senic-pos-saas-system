@@ -2,6 +2,7 @@ import i18n from '@/i18n'
 import { type CsvColumn, datedFilename, downloadCsv } from '@/lib/export-csv'
 import { formatDateTime } from '@/lib/format'
 import type { QueuedOrder } from './db'
+import { refusalOf } from './db'
 
 // A copy of the unsent sales outside the browser, for the case where the queue itself is lost
 // (cleared site data, a broken device). One row per line of a bill, readable in a spreadsheet,
@@ -40,7 +41,7 @@ export function queueColumns(): CsvColumn<QueueRow>[] {
       header: t('offline.export.payment'),
       value: ({ order }) => t(`payment.${order.request.paymentMethod}`),
     },
-    { header: t('offline.export.reason'), value: ({ order }) => order.error },
+    { header: t('offline.export.reason'), value: ({ order }) => refusalOf(order) },
   ]
 }
 

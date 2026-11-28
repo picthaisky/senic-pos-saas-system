@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DASHBOARD_KEY } from '@/features/dashboard/api'
 import { INVENTORY_KEY } from '@/features/inventory/api'
-import { errorMessage, isNetworkError } from '@/lib/api'
+import { errorMessage, getProblem, isNetworkError } from '@/lib/api'
 import { queryClient } from '@/lib/query-client'
 import { useAuthStore } from '@/stores/auth'
 import { useNetworkStore } from '@/stores/network'
@@ -94,7 +94,14 @@ export async function syncQueue(): Promise<SyncReport> {
         report.sent++
       } catch (error) {
         if (isNetworkError(error)) break
-        await offlineDb.putOrder({ ...queued, status: 'failed', error: errorMessage(error, '') })
+        const problem = getProblem(error)
+        await offlineDb.putOrder({
+          ...queued,
+          status: 'failed',
+          error: errorMessage(error, ''),
+          errorCode: problem?.code,
+          errorParams: problem?.params,
+        })
         report.failed++
       }
     }

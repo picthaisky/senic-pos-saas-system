@@ -772,6 +772,10 @@ export const dataRoutes: MockRoute[] = [
     ({ params }) => {
       const index = items.findIndex((candidate) => candidate.id === params.id)
       if (index < 0) return notFound
+      // Like the API: a bill still points at an item that was sold.
+      if (orders.some((order) => order.items.some((line) => line.inventoryItemId === params.id))) {
+        return problem(409, 'item_has_sales', 'The item has been sold, so it cannot be deleted.')
+      }
       items.splice(index, 1)
       return { status: 204 }
     },

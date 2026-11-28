@@ -163,6 +163,22 @@ public class ItemImportApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ACsvSavedByExcelOnThaiWindows_IsReadAsThai()
+    {
+        var owner = await _factory.SignInAsync("owner@a.test");
+        // Plain "CSV" in Excel on a Thai Windows is Windows-874, not UTF-8.
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = Encoding.GetEncoding(874).GetBytes("SKU,ชื่อสินค้า,หมวดหมู่,ราคาขาย\r\nIMP-F1,ปลากระป๋อง,ของแห้ง,22\r\n");
+
+        var result = await ReadAsync(await owner.PostAsync("/api/inventory/import", Upload(bytes, "items.csv")));
+
+        result.Should().BeEquivalentTo(new { TotalRows = 1, ToCreate = 1, Applied = true });
+        var item = (await ItemAsync("IMP-F1"))!;
+        item.Name.Should().Be("ปลากระป๋อง");
+        item.Category.Should().Be("ของแห้ง");
+    }
+
+    [Fact]
     public async Task AFileThatCannotBeUsed_IsRefusedWithACode()
     {
         var owner = await _factory.SignInAsync("owner@a.test");
@@ -176,7 +192,7 @@ public class ItemImportApiTests : IClassFixture<ApiFactory>
 
         (await CodeAsync(Csv("sku,name,price\nX,Y,1\n", "items.txt"))).Should().Be(ErrorCodes.ImportFileType);
         (await CodeAsync(Upload(Encoding.UTF8.GetBytes("this is not a workbook"), "items.xlsx"))).Should().Be(ErrorCodes.ImportFileUnreadable);
-        (await CodeAsync(Upload([0xE0, 0xB8, 0xFF, 0xFE, 0x2C], "items.csv"))).Should().Be(ErrorCodes.ImportFileUnreadable, "the file is not UTF-8");
+        (await CodeAsync(Upload([0xE0, 0xB8, 0xFF, 0xFE, 0x2C], "items.csv"))).Should().Be(ErrorCodes.ImportMissingColumn, "bytes that are not text have no headings");
         (await CodeAsync(Csv("sku,name\nX,Y\n"))).Should().Be(ErrorCodes.ImportMissingColumn);
         (await CodeAsync(Csv("sku,name,price\n"))).Should().Be(ErrorCodes.ImportFileEmpty);
         (await CodeAsync(Csv("sku,name,price\n" + string.Concat(Enumerable.Range(0, 5001).Select(i => $"IMP-MANY-{i},Item,1\n"))))).Should().Be(ErrorCodes.ImportTooManyRows);

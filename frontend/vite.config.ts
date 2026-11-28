@@ -43,6 +43,20 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api\//, /^\/hubs\//],
           // Adds the push and notification-click handlers (public/push-sw.js).
           importScripts: ['push-sw.js'],
+          // Pictures of items the device has already shown stay available offline. A picture
+          // never changes under its address, so the copy is always right; the oldest are
+          // dropped beyond 400, to leave the device's storage to the sales kept offline.
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/images/'),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'item-pictures',
+                expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 60 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
+          ],
         },
       }),
     ],

@@ -23,5 +23,8 @@ public interface IInventoryItemRepository : IRepository<InventoryItem>
     Task<IReadOnlyList<string>> GetCategoriesAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     Task<InventoryItem?> GetByBarcodeAsync(string barcode, Guid tenantId, CancellationToken cancellationToken = default);
+    /// <summary>True when the item is on at least one bill, cancelled bills included.</summary>
+    Task<bool> HasSalesAsync(Guid itemId, CancellationToken cancellationToken = default);
+
     Task<IEnumerable<InventoryItem>> GetLowStockItemsAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

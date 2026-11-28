@@ -44,7 +44,8 @@ public class SalesReportTotalsDto
     /// <summary><see cref="GrossProfit"/> as a percentage of the sales it is worked out on; 0 without such sales.</summary>
     public decimal GrossMarginPercent { get; set; }
     /// <summary>
-    /// Sales (without VAT) of lines sold before costs were recorded. They are in neither
+    /// Sales (without VAT) of lines without a cost: the item's cost was never entered (it is
+    /// 0), or the line was sold before costs were recorded. They are in neither
     /// <see cref="Cost"/> nor <see cref="GrossProfit"/>; above 0, the profit covers only part of the period.
     /// </summary>
     public decimal SalesWithoutCost { get; set; }
