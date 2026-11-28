@@ -52,6 +52,7 @@ describe('routing', () => {
       '/customers',
       '/users',
       '/audit',
+      '/settings',
       '/subscription',
     ])
   })

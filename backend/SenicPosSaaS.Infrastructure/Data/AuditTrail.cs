@@ -14,7 +14,8 @@ namespace SenicPosSaaS.Infrastructure.Data;
 /// <item>items: added, edited (including stock corrections), deleted;</item>
 /// <item>customers: added, edited, deleted, points given or taken by hand;</item>
 /// <item>bills: a change of status, i.e. a cancellation;</item>
-/// <item>users: added, renamed, role or active state changed, password changed.</item>
+/// <item>users: added, renamed, role or active state changed, password changed;</item>
+/// <item>shop settings: every change, since they decide how tax and points are worked out.</item>
 /// </list>
 /// A sale is not recorded here: the bill itself is the record (who sold is stamped on it), and
 /// the stock and points it moves follow from it. Recording them again would add several rows
@@ -61,6 +62,7 @@ internal static class AuditTrail
                 Customer customer => $"{customer.FirstName} {customer.LastName}".Trim(),
                 Order order => order.OrderNumber,
                 User user => user.Email,
+                ShopSettings settings => string.IsNullOrEmpty(settings.ShopName) ? "Shop settings" : settings.ShopName,
                 _ => null
             };
             if (label == null) continue; // not an audited kind of entity

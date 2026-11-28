@@ -68,7 +68,8 @@ describe('sales history page', () => {
     for (const line of order.items) {
       expect(dialog.getByRole('rowheader', { name: line.itemName })).toBeInTheDocument()
     }
-    expect(dialog.getByText(formatCurrency(order.netAmount))).toBeInTheDocument()
+    // Without VAT the subtotal and the total are the same amount, shown on two lines.
+    expect(dialog.getAllByText(formatCurrency(order.netAmount)).length).toBeGreaterThan(0)
     expect(dialog.getByText(t('pos.walkIn'))).toBeInTheDocument()
   })
 

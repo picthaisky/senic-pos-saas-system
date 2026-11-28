@@ -95,6 +95,17 @@ test('stays signed in after a reload and signs out', async ({ page }) => {
 
 test('adds an item, sells it at the till and sees the stock go down', async ({ page }) => {
   await signIn(page)
+
+  // The shop says it is registered for VAT, with the tax already in its prices. Every later
+  // test in this file sells in this shop.
+  await page.getByRole('link', { name: 'ตั้งค่าร้าน' }).click()
+  await page.getByLabel('ชื่อร้าน').fill('ร้านทดสอบ E2E')
+  await page.getByLabel('ร้านกับ VAT').selectOption('Inclusive')
+  await page.getByLabel('ยอดซื้อกี่บาทต่อ 1 แต้ม').fill('25')
+  await shot(page, '02b-settings')
+  await page.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกการตั้งค่าแล้ว')).toBeVisible()
+
   const item = await addItem(page, { price: '50', quantity: '10' })
   await shot(page, '03-inventory')
 
@@ -103,15 +114,18 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   const cart = page.getByRole('region', { name: 'ตะกร้า' })
   await expect(cart.getByText(item.name)).toBeVisible()
   await cart.getByRole('button', { name: `เพิ่มจำนวน ${item.name}` }).click()
-  // 2 x 50 + 7% tax
-  await expect(cart.getByText('฿107.00')).toBeVisible()
-  await expect(cart.getByText('ภาษี (7%)')).toBeVisible()
+  // 2 x 50 less a discount of 7 on the line = 93.00 to pay, with 93 x 7/107 = 6.08 of tax in it.
+  await cart.getByLabel(`ส่วนลดของ ${item.name} (บาท)`).fill('7')
+  await expect(cart.getByText('฿93.00').first()).toBeVisible()
+  await expect(cart.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
+  await expect(cart.getByText('฿6.08')).toBeVisible()
   await shot(page, '04-pos')
 
   await cart.getByRole('button', { name: 'ชำระเงิน' }).click()
   const receipt = page.getByRole('dialog', { name: 'บันทึกการขายแล้ว' })
   await expect(receipt.getByText(/^ORD-\d{8}-[0-9A-F]{8}$/)).toBeVisible()
-  await expect(receipt.getByText('฿107.00')).toBeVisible()
+  await expect(receipt.getByText('฿93.00')).toBeVisible()
+  await expect(receipt.getByText('฿6.08')).toBeVisible()
   await shot(page, '05-receipt')
   await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
 
@@ -200,8 +214,8 @@ test('finds a sale in the sales history, cancels it and gets the stock back', as
 
   await page.getByRole('link', { name: 'ประวัติการขาย' }).click()
   const row = page.getByRole('row', { name: new RegExp(number) })
-  // 30 + 7% tax
-  await expect(row.getByText('฿32.10')).toBeVisible()
+  // The price already includes the tax.
+  await expect(row.getByText('฿30.00')).toBeVisible()
   await shot(page, '12-orders')
 
   await row.getByRole('button', { name: `ดูรายละเอียด ${number}` }).click()

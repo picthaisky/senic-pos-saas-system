@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { inventoryApi } from '@/features/inventory/api'
+import { DEFAULT_SHOP_SETTINGS } from '@/features/shop/api'
 import i18n from '@/i18n'
 import { downloadCsv, toCsv } from '@/lib/export-csv'
 import { formatDateTime } from '@/lib/format'
+import { mockShopSettings } from '@/mocks/mock-data'
 import { useAuthStore } from '@/stores/auth'
 import { renderApp, signIn } from '@/test/render-app'
 import { useCartStore } from '../cart-store'
@@ -43,6 +45,7 @@ afterEach(async () => {
   await vi.waitFor(() => expect(useOrderQueue.getState().syncing).toBe(false))
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS }
   vi.mocked(downloadCsv).mockClear()
   useStorageProtection.setState({ protection: 'unknown' })
   for (const order of await offlineDb.listOrders(TENANT)) {
@@ -53,6 +56,8 @@ afterEach(async () => {
 
 describe('selling while offline', () => {
   it('uses the local catalog, queues the sale, and sends it exactly once when back online', async () => {
+    // The till read the shop's VAT settings while it was online, and prices with them offline.
+    mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, vatMode: 'Exclusive' }
     renderApp('/pos', 'Cashier')
     await screen.findByLabelText(t('pos.searchProducts'))
     // Opening the POS downloads the catalog for offline use.

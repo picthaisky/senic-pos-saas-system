@@ -18,6 +18,12 @@ public class Order : TenantEntity
     public decimal DiscountAmount { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal NetAmount { get; set; }
+    /// <summary>How the shop's prices related to VAT when the bill was made; a reprint never changes.</summary>
+    public VatMode VatMode { get; set; }
+    /// <summary>The VAT rate used, e.g. 7. Meaningless when <see cref="VatMode"/> is None.</summary>
+    public decimal VatRatePercent { get; set; }
+    /// <summary>Points this bill gave its customer; taken back if the bill is cancelled.</summary>
+    public int PointsEarned { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public DateTime? CompletedAt { get; set; }

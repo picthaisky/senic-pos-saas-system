@@ -73,7 +73,14 @@ export function OrderDetailModal({ order, onClose, onCancelOrder }: OrderDetailM
               </th>
               <td className="py-2 text-right tabular-nums">{formatNumber(line.quantity)}</td>
               <td className="py-2 text-right tabular-nums">{formatCurrency(line.unitPrice)}</td>
-              <td className="py-2 text-right tabular-nums">{formatCurrency(line.subtotal)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {formatCurrency(line.subtotal)}
+                {line.discount > 0 && (
+                  <span className="block text-xs text-muted">
+                    {t('orders.lineDiscount', { amount: formatCurrency(line.discount) })}
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -88,12 +95,28 @@ export function OrderDetailModal({ order, onClose, onCancelOrder }: OrderDetailM
             <dd className="text-right tabular-nums">-{formatCurrency(order.discountAmount)}</dd>
           </>
         )}
-        <dt className="text-muted">{t('orders.tax')}</dt>
-        <dd className="text-right tabular-nums">{formatCurrency(order.taxAmount)}</dd>
+        {order.vatMode === 'Exclusive' && (
+          <>
+            <dt className="text-muted">{t('pos.tax', { rate: order.vatRatePercent })}</dt>
+            <dd className="text-right tabular-nums">{formatCurrency(order.taxAmount)}</dd>
+          </>
+        )}
         <dt className="text-base font-semibold">{t('pos.total')}</dt>
         <dd className="text-right text-base font-semibold tabular-nums">
           {formatCurrency(order.netAmount)}
         </dd>
+        {order.vatMode === 'Inclusive' && (
+          <>
+            <dt className="text-muted">{t('pos.taxIncluded', { rate: order.vatRatePercent })}</dt>
+            <dd className="text-right tabular-nums">{formatCurrency(order.taxAmount)}</dd>
+          </>
+        )}
+        {order.pointsEarned > 0 && (
+          <>
+            <dt className="text-muted">{t('pos.pointsEarned')}</dt>
+            <dd className="text-right tabular-nums">+{formatNumber(order.pointsEarned)}</dd>
+          </>
+        )}
       </dl>
     </Modal>
   )

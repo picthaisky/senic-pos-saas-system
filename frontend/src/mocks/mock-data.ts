@@ -4,6 +4,8 @@ import type { CreateUser, ManagedUser, UpdateUser } from '@/features/users/types
 import type { DashboardSummary } from '@/features/dashboard/api'
 import type { CreateInventoryItem, InventoryItem } from '@/features/inventory/types'
 import type { CreateOrder, Order } from '@/features/pos/types'
+import { DEFAULT_SHOP_SETTINGS, type ShopSettings } from '@/features/shop/api'
+import { billTotals, lineSubtotal, pointsFor } from '@/features/shop/pricing'
 import type { Subscription } from '@/features/subscription/api'
 import type { MockResult, MockRoute } from './mock-api'
 
@@ -11,7 +13,6 @@ import type { MockResult, MockRoute } from './mock-api'
 // (docs/API_REFERENCE.md §3–6). Data resets on every page reload. It does not check roles.
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const TAX_RATE = 0.07
 const round2 = (value: number) => Math.round(value * 100) / 100
 const uuid = () => crypto.randomUUID()
 const notFound = { status: 404, data: { title: 'Not Found', status: 404 } }
@@ -170,11 +171,14 @@ function listResult<T>(
   }
 }
 
+/** Tests replace `current`. Starts like a shop that has saved nothing: no VAT, no points. */
+export const mockShopSettings: { current: ShopSettings } = { current: { ...DEFAULT_SHOP_SETTINGS } }
+
 const orders: Order[] = []
 const ordersByClientId = new Map<string, Order>()
 let orderSequence = 1
 
-/** Same arithmetic as the backend's OrderService today: tax is 7% of the item total. */
+/** Priced like the backend: by the shop's VAT mode, discounts before tax, points for a known customer. */
 function buildOrder(request: CreateOrder, createdAt: Date): Order {
   const lines = request.items.map((line) => {
     const item = items.find((candidate) => candidate.id === line.inventoryItemId)!
@@ -185,21 +189,28 @@ function buildOrder(request: CreateOrder, createdAt: Date): Order {
       quantity: line.quantity,
       unitPrice: item.price,
       discount: line.discount,
-      subtotal: round2(item.price * line.quantity - line.discount),
+      subtotal: lineSubtotal({
+        unitPrice: item.price,
+        quantity: line.quantity,
+        discount: line.discount,
+      }),
     }
   })
-  const totalAmount = round2(lines.reduce((sum, line) => sum + line.subtotal, 0))
-  const taxAmount = round2(totalAmount * TAX_RATE)
+  const shop = mockShopSettings.current
+  const totals = billTotals(lines, { kind: 'amount', value: request.discountAmount }, shop)
   const customer = customers.find((candidate) => candidate.id === request.customerId)
   return {
     id: uuid(),
     orderNumber: `ORD-${String(orderSequence++).padStart(5, '0')}`,
     customerId: customer?.id ?? null,
     customerName: customer?.fullName ?? '',
-    totalAmount,
-    discountAmount: request.discountAmount,
-    taxAmount,
-    netAmount: round2(totalAmount + taxAmount - request.discountAmount),
+    totalAmount: totals.itemsTotal,
+    discountAmount: totals.billDiscount,
+    taxAmount: totals.tax,
+    netAmount: totals.total,
+    vatMode: shop.vatMode,
+    vatRatePercent: shop.vatMode === 'None' ? 0 : shop.vatRatePercent,
+    pointsEarned: customer ? pointsFor(totals.total, shop.bahtPerPoint) : 0,
     status: 'Completed',
     paymentMethod: request.paymentMethod,
     createdAt: createdAt.toISOString(),
@@ -267,6 +278,22 @@ function changePoints(
     createdAt: new Date().toISOString(),
   })
   return { status: 200, data: { ...customer } }
+}
+
+/** The points a bill gives its customer, or takes back when it is cancelled. */
+function movePoints(order: Order, type: 'Earned' | 'Reversed') {
+  const customer = customers.find((candidate) => candidate.id === order.customerId)
+  if (!customer || order.pointsEarned === 0) return
+  customer.loyaltyPoints += type === 'Earned' ? order.pointsEarned : -order.pointsEarned
+  loyalty.push({
+    id: uuid(),
+    customerId: customer.id,
+    type,
+    points: order.pointsEarned,
+    orderId: order.id,
+    description: order.orderNumber,
+    createdAt: new Date().toISOString(),
+  })
 }
 
 // ---------- Routes ----------
@@ -644,6 +671,7 @@ export const dataRoutes: MockRoute[] = [
       }
 
       const order = buildOrder(request, new Date())
+      movePoints(order, 'Earned')
       for (const line of request.items) {
         items.find((candidate) => candidate.id === line.inventoryItemId)!.quantity -= line.quantity
       }
@@ -692,12 +720,24 @@ export const dataRoutes: MockRoute[] = [
       // Like the API: cancelling twice does not put the stock back twice.
       if (order.status !== 'Cancelled') {
         order.status = 'Cancelled'
+        movePoints(order, 'Reversed')
         for (const line of order.items) {
           const item = items.find((candidate) => candidate.id === line.inventoryItemId)
           if (item) item.quantity += line.quantity
         }
       }
       return { status: 200, data: { message: 'Order cancelled successfully' } }
+    },
+  ],
+
+  // Shop settings
+  ['GET', '/shop-settings', () => ({ status: 200, data: { ...mockShopSettings.current } })],
+  [
+    'PUT',
+    '/shop-settings',
+    ({ body }) => {
+      mockShopSettings.current = { ...DEFAULT_SHOP_SETTINGS, ...(body as ShopSettings) }
+      return { status: 200, data: { ...mockShopSettings.current } }
     },
   ],
 

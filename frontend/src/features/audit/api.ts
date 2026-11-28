@@ -3,7 +3,13 @@ import { api } from '@/lib/api'
 
 // Shapes from docs/API_REFERENCE.md (audit trail).
 
-export const AUDIT_ENTITY_TYPES = ['InventoryItem', 'Customer', 'Order', 'User'] as const
+export const AUDIT_ENTITY_TYPES = [
+  'InventoryItem',
+  'Customer',
+  'Order',
+  'User',
+  'ShopSettings',
+] as const
 export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number]
 
 export type AuditValue = string | number | boolean | null

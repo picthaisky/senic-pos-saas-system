@@ -44,6 +44,7 @@
     "customers": "Customers",
     "users": "Users",
     "audit": "Change history",
+    "settings": "Shop settings",
     "subscription": "Subscription",
     "openMenu": "Open menu",
     "closeMenu": "Close menu"
@@ -155,7 +156,9 @@
     "saved": "Customer saved",
     "emailTaken": "Another customer already uses this email",
     "searchPlaceholder": "Name, email or phone",
-    "noMatch": "No customer matches the search"
+    "noMatch": "No customer matches the search",
+    "fromSale": "From sale {{number}}",
+    "fromCancel": "Bill {{number}} cancelled"
   },
   "users": {
     "list": "Users",
@@ -220,9 +223,17 @@
       "InventoryItem": "Item",
       "Customer": "Customer",
       "Order": "Bill",
-      "User": "User"
+      "User": "User",
+      "ShopSettings": "Shop settings"
     },
     "fields": {
+      "shopName": "Shop name",
+      "taxId": "Taxpayer ID",
+      "branch": "Branch",
+      "vatMode": "The shop and VAT",
+      "vatRatePercent": "VAT rate (%)",
+      "bahtPerPoint": "Baht per point",
+      "receiptFooter": "Receipt footer",
       "name": "Name",
       "description": "Description",
       "sku": "SKU",
@@ -246,6 +257,9 @@
       "passwordHash": "Password changed"
     },
     "values": {
+      "None": "No VAT",
+      "Inclusive": "Prices include VAT",
+      "Exclusive": "Prices before VAT",
       "Admin": "Administrator",
       "Owner": "Owner",
       "Cashier": "Cashier",
@@ -284,6 +298,41 @@
     "ended": "The subscription has ended",
     "contact": "To renew or change plan, please contact your provider."
   },
+  "settings": {
+    "shop": "Shop details",
+    "shopName": "Shop name",
+    "shopNameHint": "Shown on receipts",
+    "phone": "Phone",
+    "address": "Address",
+    "taxId": "Taxpayer ID",
+    "taxIdHint": "13 digits; may be left empty until it is needed",
+    "taxIdInvalid": "Must be 13 digits",
+    "branch": "Branch",
+    "branchHint": "For example: Head office, or Branch 00001",
+    "receiptFooter": "Receipt footer",
+    "vat": "Value added tax (VAT)",
+    "vatMode": "The shop and VAT",
+    "vatModes": {
+      "None": "Not registered for VAT",
+      "Inclusive": "Registered; prices include VAT",
+      "Exclusive": "Registered; prices are before VAT"
+    },
+    "vatModeHints": {
+      "None": "No VAT is charged or shown on bills",
+      "Inclusive": "Customers pay the shelf price; the VAT is worked out of what they pay",
+      "Exclusive": "VAT is added to the item prices after discounts"
+    },
+    "vatRate": "VAT rate (%)",
+    "vatRateHint": "The current rate is 7%",
+    "rateTooHigh": "Must not be more than 100",
+    "vatNotice": "A change here applies to new bills only; existing bills keep their amounts. Please confirm with the shop's accountant whether the shop must register for VAT. The system does not issue tax invoices yet.",
+    "points": "Loyalty points",
+    "bahtPerPoint": "Baht spent per point",
+    "pointsOff": "0 = sales give no points",
+    "pointsExample": "A purchase of 1,000 baht earns {{points}} points",
+    "pointsRules": "A customer earns points when their name is chosen at the till, on what they actually pay after discounts. A part of a point is not given, and points are taken back when the bill is cancelled.",
+    "saved": "Settings saved"
+  },
   "pos": {
     "scanBarcode": "Scan barcode",
     "scanPlaceholder": "Scan or type a barcode, then press Enter",
@@ -313,7 +362,15 @@
     "clearConfirm": "Remove every item from the cart?",
     "orderCreated": "Sale recorded",
     "orderNumber": "Order number",
-    "newSale": "New sale"
+    "newSale": "New sale",
+    "taxIncluded": "Includes {{rate}}% VAT",
+    "discount": "Discount",
+    "lineDiscount": "Discount (฿)",
+    "lineDiscountNamed": "Discount on {{name}} (฿)",
+    "billDiscount": "Bill discount",
+    "billDiscountKind": "Discount unit",
+    "pointsToEarn": "Points the customer will earn",
+    "pointsEarned": "Points earned"
   },
   "orders": {
     "from": "From",
@@ -346,7 +403,8 @@
     "cancelOrder": "Cancel bill",
     "cancelNamed": "Cancel bill {{number}}",
     "cancelConfirm": "Cancel bill {{number}} of {{total}}? Its items go back into stock, and a cancelled bill cannot be restored.",
-    "cancelled": "Bill {{number}} cancelled"
+    "cancelled": "Bill {{number}} cancelled",
+    "lineDiscount": "{{amount}} off"
   },
   "payment": {
     "Cash": "Cash",

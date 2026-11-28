@@ -183,7 +183,7 @@ public class TenantDataApiTests : IClassFixture<ApiFactory>
     // ---------- Orders ----------
 
     [Fact]
-    public async Task Sale_ToAWalkInCustomer_IsCompleted_DeductsStock_AndRoundsTax()
+    public async Task Sale_ToAWalkInCustomer_IsCompleted_DeductsStock_AndChargesNoTaxByDefault()
     {
         var item = await _factory.AddItemAsync(ApiFactory.TenantA, "Tax rounding", 19.99m, 10);
         var client = await _factory.SignInAsync("cashier@a.test");
@@ -198,8 +198,9 @@ public class TenantDataApiTests : IClassFixture<ApiFactory>
         order.Status.Should().Be(OrderStatus.Completed);
         order.CompletedAt.Should().NotBeNull();
         order.TotalAmount.Should().Be(59.97m);
-        order.TaxAmount.Should().Be(4.20m, "7% of 59.97 is 4.1979");
-        order.NetAmount.Should().Be(64.17m);
+        // A shop charges no VAT until it says it is registered (ShopSettingsApiTests covers the rest).
+        order.TaxAmount.Should().Be(0m);
+        order.NetAmount.Should().Be(59.97m);
         order.Items.Should().ContainSingle().Which.ItemName.Should().Be("Tax rounding");
         (await _factory.StockOfAsync(item.Id)).Should().Be(7);
     }
@@ -342,10 +343,10 @@ public class TenantDataApiTests : IClassFixture<ApiFactory>
         var summary = await ownerB.GetFromJsonAsync<DashboardSummaryDto>("/api/dashboard/summary", ApiFactory.Json);
 
         summary!.OrderCount.Should().Be(1);
-        summary.TotalSales.Should().Be(214m, "2 x 100 plus 7% tax; the cancelled order does not count");
-        summary.AverageOrderValue.Should().Be(214m);
+        summary.TotalSales.Should().Be(200m, "2 x 100; the cancelled order does not count");
+        summary.AverageOrderValue.Should().Be(200m);
         summary.SalesByDay.Should().HaveCount(7, "the default range is the last 7 days");
-        summary.SalesByDay.Last().Should().BeEquivalentTo(new { Total = 214m, OrderCount = 1 });
+        summary.SalesByDay.Last().Should().BeEquivalentTo(new { Total = 200m, OrderCount = 1 });
         summary.SalesByDay.SkipLast(1).Should().OnlyContain(day => day.OrderCount == 0);
         summary.TopItems.Should().ContainSingle().Which.Should().BeEquivalentTo(new { InventoryItemId = mine.Id, Name = "B bestseller", Quantity = 2, Total = 200m });
     }

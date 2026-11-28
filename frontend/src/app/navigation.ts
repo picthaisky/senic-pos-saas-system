@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Package,
   Receipt,
+  Settings,
   ShoppingCart,
   UserCog,
   Users,
@@ -22,6 +23,7 @@ export interface NavItem {
     | 'nav.users'
     | 'nav.audit'
     | 'nav.subscription'
+    | 'nav.settings'
   icon: LucideIcon
   /** Roles allowed to open the page; omitted means every signed-in user. */
   roles?: readonly Role[]
@@ -45,6 +47,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: '/customers', labelKey: 'nav.customers', icon: Users, roles: ['Admin', 'Owner'] },
   { path: '/users', labelKey: 'nav.users', icon: UserCog, roles: ['Admin', 'Owner'] },
   { path: '/audit', labelKey: 'nav.audit', icon: History, roles: ['Admin', 'Owner'] },
+  {
+    path: '/settings',
+    labelKey: 'nav.settings',
+    icon: Settings,
+    roles: ['Admin', 'Owner'],
+  },
   {
     path: '/subscription',
     labelKey: 'nav.subscription',

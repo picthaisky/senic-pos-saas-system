@@ -32,6 +32,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<LoyaltyTransaction> LoyaltyTransactions => Set<LoyaltyTransaction>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ShopSettings> ShopSettings => Set<ShopSettings>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -124,6 +125,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<LoyaltyTransaction>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<PushSubscription>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<AuditLog>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<ShopSettings>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         // OrderItem has no TenantId of its own; it follows its order.
         modelBuilder.Entity<OrderItem>().HasQueryFilter(e => CurrentTenantId == null || e.Order!.TenantId == CurrentTenantId);
 
@@ -140,6 +142,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
+            entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
 
             entity.HasOne(e => e.Customer)
                 .WithMany(c => c.Orders)
@@ -253,6 +256,21 @@ public class ApplicationDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // One row of settings per shop
+        modelBuilder.Entity<ShopSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TenantId).IsUnique();
+            entity.Property(e => e.ShopName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Address).HasMaxLength(500);
+            entity.Property(e => e.Phone).HasMaxLength(20);
+            entity.Property(e => e.TaxId).HasMaxLength(13);
+            entity.Property(e => e.Branch).HasMaxLength(100);
+            entity.Property(e => e.ReceiptFooter).HasMaxLength(500);
+            entity.Property(e => e.VatRatePercent).HasPrecision(5, 2);
+            entity.Property(e => e.BahtPerPoint).HasPrecision(18, 2);
         });
 
         // Configure AuditLog entity

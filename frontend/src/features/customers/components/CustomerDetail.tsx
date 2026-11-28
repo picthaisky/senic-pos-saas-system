@@ -72,7 +72,17 @@ export function CustomerDetail({ customer }: { customer: Customer }) {
                     </span>
                     <span className="text-xs text-muted">{formatDateTime(entry.createdAt)}</span>
                   </div>
-                  <p className="text-sm text-muted">{entry.description}</p>
+                  <p className="text-sm text-muted">
+                    {/* A line written by a sale or a cancellation carries the bill's number. */}
+                    {entry.orderId
+                      ? t(
+                          entry.type === 'Reversed' ? 'customers.fromCancel' : 'customers.fromSale',
+                          {
+                            number: entry.description,
+                          },
+                        )
+                      : entry.description}
+                  </p>
                 </li>
               ))}
             </ul>

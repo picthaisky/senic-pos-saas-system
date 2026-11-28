@@ -229,6 +229,7 @@ public class PagingApiTests : IClassFixture<ApiFactory>
 }
 
 /// <summary>The same against PostgreSQL: ordering, counting and summing are done by the database.</summary>
+[Trait("Category", "Postgres")]
 public class PagingPostgresTests : PagingApiTests, IClassFixture<PostgresApiFactory>
 {
     public PagingPostgresTests(PostgresApiFactory factory) : base(factory)

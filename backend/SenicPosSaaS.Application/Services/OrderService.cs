@@ -11,22 +11,26 @@ namespace SenicPosSaaS.Application.Services;
 
 public class OrderService : IOrderService
 {
-    private const decimal TaxRate = 0.07m;
-
     private readonly IOrderRepository _orderRepository;
     private readonly IInventoryItemRepository _inventoryRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly IShopSettingsService _shopSettings;
+    private readonly IRepository<LoyaltyTransaction> _loyalty;
     private readonly IRealtimeNotifier? _notifier;
 
     public OrderService(
         IOrderRepository orderRepository,
         IInventoryItemRepository inventoryRepository,
         ICustomerRepository customerRepository,
+        IShopSettingsService shopSettings,
+        IRepository<LoyaltyTransaction> loyalty,
         IRealtimeNotifier? notifier = null)
     {
         _orderRepository = orderRepository;
         _inventoryRepository = inventoryRepository;
         _customerRepository = customerRepository;
+        _shopSettings = shopSettings;
+        _loyalty = loyalty;
         _notifier = notifier;
     }
 
@@ -56,6 +60,13 @@ public class OrderService : IOrderService
             if (customer == null || customer.TenantId != dto.TenantId)
                 throw new NotFoundException("Customer not found");
         }
+
+        if (dto.DiscountAmount < 0)
+            throw new InvalidRequestException("The bill discount cannot be negative.");
+
+        // Read once per sale and written onto the bill, so a later change of the settings does not
+        // alter what this bill says.
+        var settings = await _shopSettings.GetEntityAsync(dto.TenantId, cancellationToken);
 
         var now = DateTime.UtcNow;
         var order = new Order
@@ -89,7 +100,10 @@ public class OrderService : IOrderService
             if (inventoryItem.Quantity < itemDto.Quantity)
                 throw new ConflictException($"Insufficient stock for {inventoryItem.Name} ({inventoryItem.Quantity} left)");
 
-            var subtotal = (inventoryItem.Price * itemDto.Quantity) - itemDto.Discount;
+            if (itemDto.Discount < 0 || itemDto.Discount > inventoryItem.Price * itemDto.Quantity)
+                throw new InvalidRequestException($"The discount on {inventoryItem.Name} must be between 0 and the amount of the line.");
+
+            var subtotal = OrderPricing.LineSubtotal(inventoryItem.Price, itemDto.Quantity, itemDto.Discount);
             totalAmount += subtotal;
 
             orderItems.Add(new OrderItem
@@ -116,10 +130,26 @@ public class OrderService : IOrderService
                 newlyLowStock[inventoryItem.Id] = inventoryItem;
         }
 
-        order.TotalAmount = totalAmount;
-        order.TaxAmount = Math.Round(totalAmount * TaxRate, 2, MidpointRounding.AwayFromZero);
-        order.NetAmount = totalAmount + order.TaxAmount - order.DiscountAmount;
+        if (order.DiscountAmount > totalAmount)
+            throw new InvalidRequestException("The bill discount cannot be more than the total of the items.");
+
+        // Discounts come off before tax, and the tax is worked out once for the whole bill.
+        var amounts = OrderPricing.Calculate(totalAmount, order.DiscountAmount, settings.VatMode, settings.VatRatePercent);
+        order.TotalAmount = amounts.ItemsTotal;
+        order.TaxAmount = amounts.TaxAmount;
+        order.NetAmount = amounts.NetAmount;
+        order.VatMode = settings.VatMode;
+        order.VatRatePercent = settings.VatMode == VatMode.None ? 0 : settings.VatRatePercent;
         order.OrderItems = orderItems;
+
+        // Points are for a known customer only, on what they actually pay, in the same save as the
+        // bill: a retried request finds the bill and does not earn twice.
+        if (customer != null)
+        {
+            order.PointsEarned = OrderPricing.PointsFor(order.NetAmount, settings.BahtPerPoint);
+            if (order.PointsEarned > 0)
+                await MovePointsAsync(customer, order, LoyaltyTransactionType.Earned, now, cancellationToken);
+        }
 
         // The order, its items and the stock changes are saved together in one transaction.
         await _orderRepository.AddAsync(order, cancellationToken);
@@ -197,10 +227,39 @@ public class OrderService : IOrderService
             }
         }
 
+        // Take back exactly what this bill gave. The balance may go below zero when the customer
+        // has already spent the points: buying, redeeming and cancelling must not leave a profit.
+        if (order.PointsEarned > 0 && order.CustomerId.HasValue)
+        {
+            var customer = order.Customer ?? await _customerRepository.GetByIdAsync(order.CustomerId.Value, cancellationToken);
+            if (customer != null)
+                await MovePointsAsync(customer, order, LoyaltyTransactionType.Reversed, order.UpdatedAt.Value, cancellationToken);
+        }
+
         await _orderRepository.UpdateAsync(order, cancellationToken);
         await _orderRepository.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    /// <summary>Adds (Earned) or takes back (Reversed) the bill's points, with a history line that names the bill.</summary>
+    private async Task MovePointsAsync(Customer customer, Order order, LoyaltyTransactionType type, DateTime now, CancellationToken cancellationToken)
+    {
+        customer.LoyaltyPoints += type == LoyaltyTransactionType.Earned ? order.PointsEarned : -order.PointsEarned;
+        customer.UpdatedAt = now;
+        await _customerRepository.UpdateAsync(customer, cancellationToken);
+
+        await _loyalty.AddAsync(new LoyaltyTransaction
+        {
+            Id = Guid.NewGuid(),
+            TenantId = order.TenantId,
+            CustomerId = customer.Id,
+            Type = type,
+            Points = order.PointsEarned,
+            OrderId = order.Id,
+            Description = order.OrderNumber,
+            CreatedAt = now
+        }, cancellationToken);
     }
 
     private static string GenerateOrderNumber()
@@ -221,6 +280,9 @@ public class OrderService : IOrderService
             DiscountAmount = order.DiscountAmount,
             TaxAmount = order.TaxAmount,
             NetAmount = order.NetAmount,
+            VatMode = order.VatMode,
+            VatRatePercent = order.VatRatePercent,
+            PointsEarned = order.PointsEarned,
             Status = order.Status,
             PaymentMethod = order.PaymentMethod,
             CreatedAt = order.CreatedAt,
