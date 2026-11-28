@@ -2,6 +2,7 @@ import { Ban } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, Modal } from '@/components/ui'
 import type { Order } from '@/features/pos/types'
+import { PrintReceiptButton } from '@/features/receipt/print'
 import { formatCurrency, formatDateTime, formatNumber } from '@/lib/format'
 import { OrderStatusBadge } from './OrderStatusBadge'
 
@@ -28,6 +29,7 @@ export function OrderDetailModal({ order, onClose, onCancelOrder }: OrderDetailM
               {t('orders.cancelOrder')}
             </Button>
           )}
+          <PrintReceiptButton order={order} />
           <Button variant="secondary" onClick={onClose}>
             {t('common.close')}
           </Button>

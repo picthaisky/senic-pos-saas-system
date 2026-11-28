@@ -6,6 +6,7 @@ import { Button, ConfirmDialog, Input, Modal, Select } from '@/components/ui'
 import { useCustomers } from '@/features/customers/api'
 import { DASHBOARD_KEY } from '@/features/dashboard/api'
 import { INVENTORY_KEY } from '@/features/inventory/api'
+import { PrintReceiptButton } from '@/features/receipt/print'
 import { DEFAULT_SHOP_SETTINGS, useShopSettings } from '@/features/shop/api'
 import { lineDiscountOf, lineSubtotal, pointsFor, type VatMode } from '@/features/shop/pricing'
 import { errorMessage } from '@/lib/api'
@@ -301,7 +302,13 @@ export function CartPanel() {
         open={!!receipt}
         onClose={() => setReceipt(null)}
         title={receipt?.kind === 'queued' ? t('offline.savedTitle') : t('pos.orderCreated')}
-        footer={<Button onClick={() => setReceipt(null)}>{t('pos.newSale')}</Button>}
+        footer={
+          <>
+            {/* A sale kept on the device has no bill number yet, so nothing to print. */}
+            {receipt?.kind === 'sent' && <PrintReceiptButton order={receipt.order} />}
+            <Button onClick={() => setReceipt(null)}>{t('pos.newSale')}</Button>
+          </>
+        }
       >
         {receipt?.kind === 'sent' && (
           <dl className="grid grid-cols-2 gap-y-2 tabular-nums">

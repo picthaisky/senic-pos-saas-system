@@ -50,3 +50,115 @@
     @apply bg-bg text-fg font-sans antialiased;
   }
 }
+
+/*
+ * The printed receipt (features/receipt). On screen it is not shown; on paper it is the only
+ * thing shown. Sized for an 80 mm receipt printer and readable on A4 as well: black on white,
+ * whatever the theme of the screen.
+ */
+.receipt-print {
+  display: none;
+}
+
+@media print {
+  #root {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .receipt-print {
+    display: block;
+  }
+
+  @page {
+    margin: 4mm;
+  }
+}
+
+.receipt {
+  width: 72mm;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #000;
+}
+
+.receipt-center {
+  text-align: center;
+}
+
+.receipt-shop {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.receipt-title {
+  margin: 6px 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.receipt-void {
+  font-weight: 700;
+}
+
+.receipt-rows,
+.receipt-items {
+  width: 100%;
+  margin: 6px 0;
+  padding-top: 6px;
+  border-top: 1px dashed #000;
+}
+
+.receipt-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receipt-rows dd,
+.receipt-items td {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt-items {
+  border-collapse: collapse;
+}
+
+.receipt-items thead th {
+  padding-bottom: 2px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.receipt-items thead th:last-child {
+  text-align: right;
+}
+
+.receipt-items tbody th {
+  font-weight: 400;
+  text-align: left;
+}
+
+.receipt-items tbody th span {
+  display: block;
+  font-size: 11px;
+}
+
+.receipt-items td {
+  vertical-align: top;
+}
+
+.receipt-total {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #000;
+  font-size: 15px;
+  font-weight: 700;
+}

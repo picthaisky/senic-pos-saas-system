@@ -127,6 +127,26 @@ test('adds an item, sells it at the till and sees the stock go down', async ({ p
   await expect(receipt.getByText('฿93.00')).toBeVisible()
   await expect(receipt.getByText('฿6.08')).toBeVisible()
   await shot(page, '05-receipt')
+
+  // Printing: the browser's print dialog is replaced by a recorder. On paper only the receipt
+  // is there; the screen behind it is not.
+  await page.evaluate(() => {
+    window.print = () => document.documentElement.setAttribute('data-printed', 'yes')
+  })
+  await receipt.getByRole('button', { name: 'พิมพ์ใบเสร็จ' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-printed', 'yes')
+  await page.emulateMedia({ media: 'print' })
+  const paper = page.locator('.receipt-print')
+  await expect(paper.getByRole('heading', { name: 'ใบเสร็จรับเงิน' })).toBeVisible()
+  await expect(paper.getByText('ร้านทดสอบ E2E')).toBeVisible()
+  await expect(paper.getByRole('rowheader', { name: new RegExp(item.name) })).toBeVisible()
+  await expect(paper.getByText('รวมภาษีมูลค่าเพิ่ม 7% แล้ว')).toBeVisible()
+  await expect(paper.getByText('เอกสารนี้ไม่ใช่ใบกำกับภาษี')).toBeVisible()
+  await expect(cart).toBeHidden()
+  await shot(page, '05b-receipt-print')
+  await page.emulateMedia({ media: 'screen' })
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+  await expect(paper).toHaveCount(0)
   await receipt.getByRole('button', { name: 'ขายรายการใหม่' }).click()
 
   await page.getByRole('link', { name: 'สินค้าคงคลัง' }).click()

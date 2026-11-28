@@ -413,6 +413,28 @@
     "QRCode": "QR code",
     "BankTransfer": "Bank transfer"
   },
+  "receipt": {
+    "print": "Print receipt",
+    "title": "Receipt",
+    "cancelled": "*** CANCELLED ***",
+    "phone": "Tel. {{phone}}",
+    "taxId": "Taxpayer ID {{taxId}}",
+    "number": "No.",
+    "date": "Date",
+    "customer": "Customer",
+    "item": "Item",
+    "amount": "Amount",
+    "lineDiscount": "{{amount}} off",
+    "itemsTotal": "Subtotal",
+    "billDiscount": "Bill discount",
+    "vatAdded": "VAT {{rate}}%",
+    "vatIncluded": "Includes VAT {{rate}}%",
+    "total": "Total",
+    "paidBy": "Paid by",
+    "saved": "Total discount",
+    "points": "Points earned",
+    "notTaxInvoice": "This document is not a tax invoice"
+  },
   "offline": {
     "badge": "Offline",
     "localResults": "Results from this device. Stock levels may be out of date.",

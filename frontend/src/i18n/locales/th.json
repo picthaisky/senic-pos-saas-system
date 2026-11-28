@@ -409,6 +409,28 @@
     "QRCode": "QR Code",
     "BankTransfer": "โอนเงิน"
   },
+  "receipt": {
+    "print": "พิมพ์ใบเสร็จ",
+    "title": "ใบเสร็จรับเงิน",
+    "cancelled": "*** ยกเลิกแล้ว ***",
+    "phone": "โทร {{phone}}",
+    "taxId": "เลขประจำตัวผู้เสียภาษี {{taxId}}",
+    "number": "เลขที่",
+    "date": "วันที่",
+    "customer": "ลูกค้า",
+    "item": "รายการ",
+    "amount": "จำนวนเงิน",
+    "lineDiscount": "ลด {{amount}}",
+    "itemsTotal": "รวม",
+    "billDiscount": "ส่วนลดท้ายบิล",
+    "vatAdded": "ภาษีมูลค่าเพิ่ม {{rate}}%",
+    "vatIncluded": "รวมภาษีมูลค่าเพิ่ม {{rate}}% แล้ว",
+    "total": "ยอดสุทธิ",
+    "paidBy": "ชำระโดย",
+    "saved": "ส่วนลดรวม",
+    "points": "แต้มที่ได้",
+    "notTaxInvoice": "เอกสารนี้ไม่ใช่ใบกำกับภาษี"
+  },
   "offline": {
     "badge": "ออฟไลน์",
     "localResults": "ผลจากข้อมูลในเครื่อง จำนวนคงเหลืออาจไม่เป็นปัจจุบัน",
