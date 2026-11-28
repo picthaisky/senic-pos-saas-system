@@ -123,6 +123,53 @@ export const mockSubscription: { current: Subscription | null } = {
   },
 }
 
+/**
+ * Like the API: with `page` in the query the answer is one page, sorted as asked; without
+ * it, the whole list as an array (the form kept for older clients).
+ */
+function listResult<T>(
+  rows: T[],
+  query: Record<string, unknown>,
+  sortFields: Record<string, (row: T) => string | number>,
+  extra: object = {},
+): MockResult {
+  if (query.page === undefined) return { status: 200, data: rows }
+
+  const asked = typeof query.sort === 'string' ? query.sort : ''
+  const descending = asked.startsWith('-')
+  const field = descending ? asked.slice(1) : asked
+  if (field && !(field in sortFields)) {
+    return {
+      status: 400,
+      data: { title: 'Bad Request', status: 400, detail: 'Unknown sort field.' },
+    }
+  }
+  const sorted = [...rows]
+  if (field) {
+    const key = sortFields[field]
+    sorted.sort((a, b) => {
+      const [x, y] = [key(a), key(b)]
+      const order =
+        typeof x === 'number' && typeof y === 'number'
+          ? x - y
+          : String(x).localeCompare(String(y), 'th')
+      return descending ? -order : order
+    })
+  }
+  const page = Math.max(1, Number(query.page) || 1)
+  const pageSize = Math.min(200, Math.max(1, Number(query.pageSize) || 20))
+  return {
+    status: 200,
+    data: {
+      items: sorted.slice((page - 1) * pageSize, page * pageSize),
+      total: sorted.length,
+      page,
+      pageSize,
+      ...extra,
+    },
+  }
+}
+
 const orders: Order[] = []
 const ordersByClientId = new Map<string, Order>()
 let orderSequence = 1
@@ -400,8 +447,27 @@ export const dataRoutes: MockRoute[] = [
           (query.isActive === undefined || item.isActive === query.isActive) &&
           (!query.lowStock || item.quantity <= item.minimumStock),
       )
-      return { status: 200, data: result.map((item) => ({ ...item })) }
+      return listResult(
+        result.map((item) => ({ ...item })).sort((a, b) => a.name.localeCompare(b.name, 'th')),
+        query,
+        {
+          name: (item) => item.name,
+          sku: (item) => item.sku,
+          category: (item) => item.category ?? '',
+          price: (item) => item.price,
+          quantity: (item) => item.quantity,
+          createdAt: (item) => item.createdAt,
+        },
+      )
     },
+  ],
+  [
+    'GET',
+    '/inventory/categories',
+    () => ({
+      status: 200,
+      data: [...new Set(items.map((item) => item.category).filter((c): c is string => !!c))].sort(),
+    }),
   ],
   [
     'GET',
@@ -456,7 +522,30 @@ export const dataRoutes: MockRoute[] = [
   ],
 
   // Customers
-  ['GET', '/customers', () => ({ status: 200, data: customers.map((c) => ({ ...c })) })],
+  [
+    'GET',
+    '/customers',
+    ({ query }) => {
+      const search = typeof query.search === 'string' ? query.search : ''
+      return listResult(
+        customers
+          .filter(
+            (customer) =>
+              !search ||
+              includes(customer.fullName, search) ||
+              includes(customer.email, search) ||
+              includes(customer.phone, search),
+          )
+          .map((customer) => ({ ...customer })),
+        query,
+        {
+          name: (customer) => customer.fullName,
+          loyaltyPoints: (customer) => customer.loyaltyPoints,
+          createdAt: (customer) => customer.createdAt,
+        },
+      )
+    },
+  ],
   [
     'POST',
     '/customers',
@@ -567,9 +656,8 @@ export const dataRoutes: MockRoute[] = [
   [
     'GET',
     '/orders',
-    ({ query }) => ({
-      status: 200,
-      data: orders
+    ({ query }) => {
+      const matching = orders
         .filter((order) => {
           const day = localDate(new Date(order.createdAt))
           return (
@@ -578,8 +666,22 @@ export const dataRoutes: MockRoute[] = [
             (!query.status || order.status === query.status)
           )
         })
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    }),
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const completed = matching.filter((order) => order.status === 'Completed')
+      return listResult(
+        matching,
+        query,
+        {
+          createdAt: (order) => order.createdAt,
+          netAmount: (order) => order.netAmount,
+          orderNumber: (order) => order.orderNumber,
+        },
+        {
+          completedCount: completed.length,
+          completedTotal: round2(completed.reduce((sum, order) => sum + order.netAmount, 0)),
+        },
+      )
+    },
   ],
   [
     'POST',

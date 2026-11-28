@@ -23,6 +23,36 @@ Status code ที่ frontend จัดการ: `400` (validation, แสด�
 ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ),
 `429` (login ถี่หรือผิดหลายครั้งเกินไป มี header `Retry-After` เป็นวินาที)
 
+### การแบ่งหน้า (paging) ✅
+
+ใช้กับ `GET /api/inventory`, `GET /api/customers` และ `GET /api/orders` ร่วมกับตัวกรองเดิมของแต่ละ endpoint
+
+| Query      | ความหมาย                                                                   |
+| ---------- | -------------------------------------------------------------------------- |
+| `page`     | เริ่มที่ 1 **การส่ง `page` คือการขอคำตอบแบบแบ่งหน้า** ค่าที่น้อยกว่า 1 ถูกปรับเป็น 1       |
+| `pageSize` | ค่าเริ่มต้น 20 สูงสุด 200 ค่าที่เกินช่วงถูกปรับให้อยู่ในช่วง                                |
+| `sort`     | ชื่อ field นำหน้าด้วย `-` เพื่อเรียงจากมากไปน้อย เช่น `-price` field ที่ไม่รู้จักได้ `400` |
+
+| Endpoint         | `sort` ที่ใช้ได้                                                | ค่าเริ่มต้น      |
+| ---------------- | ----------------------------------------------------------- | ------------ |
+| `/api/inventory` | `name`, `sku`, `category`, `price`, `quantity`, `createdAt` | `name`       |
+| `/api/customers` | `name`, `loyaltyPoints`, `createdAt`                        | `name`       |
+| `/api/orders`    | `createdAt`, `netAmount`, `orderNumber`                     | `-createdAt` |
+
+```jsonc
+// GET /api/inventory?search=น้ำ&page=2&pageSize=10&sort=-price
+{ "items": [ /* InventoryItem */ ], "total": 57, "page": 2, "pageSize": 10 }
+
+// GET /api/orders?... เพิ่มยอดของบิลที่สำเร็จ "ทุกใบที่ตรงกับตัวกรอง" ไม่ใช่เฉพาะหน้านี้
+{ "items": [ /* Order */ ], "total": 132, "page": 1, "pageSize": 10,
+  "completedCount": 128, "completedTotal": 45210.5 }
+```
+
+หน้าที่เกินจำนวนจริงได้ `items` ว่างและ `total` ที่ถูกต้อง ลำดับใช้ `id` ตัดสินเมื่อค่าที่เรียงเท่ากัน แถวหนึ่งจึงไม่ปรากฏสองหน้าหรือหายไป
+
+**ถ้าไม่ส่ง `page`** ทั้งสาม endpoint ยังตอบเป็น array ของทุกรายการเหมือนเดิม เก็บไว้ให้แอปรุ่นก่อนที่ยังค้างอยู่ในเบราว์เซอร์ของผู้ใช้ทำงานต่อได้
+รูปแบบนี้ไม่จำกัดจำนวนรายการและจะถูกถอดออกในรุ่นถัดไป โค้ดใหม่ต้องส่ง `page` เสมอ (frontend ปัจจุบันไม่ใช้รูปแบบเดิมแล้ว)
+
 ## 2. Authentication
 
 Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
@@ -105,6 +135,7 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 | Method | Path                                                   | Role         | สถานะ |
 | ------ | ------------------------------------------------------ | ------------ | ----- |
 | GET    | `/api/inventory?search=&category=&isActive=&lowStock=` | ทุก role      | ✅    |
+| GET    | `/api/inventory/categories`                            | ทุก role      | ✅    |
 | GET    | `/api/inventory/{id}`                                  | ทุก role      | ✅    |
 | GET    | `/api/inventory/barcode/{barcode}`                     | ทุก role      | ✅    |
 | GET    | `/api/inventory/low-stock`                             | Admin, Owner | ✅    |
@@ -132,6 +163,9 @@ Role ที่ใช้: `Admin`, `Owner`, `Cashier`, `Viewer`
 ```
 
 Frontend เปลี่ยนมาใช้ชื่อ field ของ backend: `minimumStock` (เดิมใช้ `minQuantity`)
+
+`GET /api/inventory/categories` คืน array ของชื่อหมวดหมู่ที่มีใช้อยู่ เรียงตามตัวอักษร ใช้กับตัวกรองและคำแนะนำในฟอร์ม
+รายการสินค้ารองรับการแบ่งหน้า ดูหัวข้อ "การแบ่งหน้า" ในข้อ 1
 
 ## 4. Customers
 

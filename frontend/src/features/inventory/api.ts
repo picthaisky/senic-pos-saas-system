@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fetchAllPages, type Page, type PageQuery } from '@/lib/paging'
 import type {
   CreateInventoryItem,
   InventoryFilter,
@@ -8,8 +9,20 @@ import type {
 } from './types'
 
 export const inventoryApi = {
-  list: (filter: InventoryFilter = {}) =>
-    api.get<InventoryItem[]>('/inventory', { params: filter }).then((r) => r.data),
+  /** One page of the items matching the filter. */
+  page: (filter: InventoryFilter, query: PageQuery) =>
+    api
+      .get<Page<InventoryItem>>('/inventory', { params: { ...filter, ...query } })
+      .then((r) => r.data),
+
+  /**
+   * Every item matching the filter, read page by page. For a search, an export, and the copy
+   * of the catalogue kept for offline use; screens that list items use `page`.
+   */
+  list: (filter: InventoryFilter = {}, sort?: string) =>
+    fetchAllPages((query) => inventoryApi.page(filter, query), sort),
+
+  categories: () => api.get<string[]>('/inventory/categories').then((r) => r.data),
 
   /** Rejects with a 404 when no item has this barcode. */
   getByBarcode: (barcode: string) =>
@@ -27,23 +40,20 @@ export const inventoryApi = {
 /** Everything under this key is refetched after any inventory change (including a sale). */
 export const INVENTORY_KEY = ['inventory'] as const
 
-export function useInventory(filter: InventoryFilter, options?: { enabled?: boolean }) {
+export function useInventoryPage(filter: InventoryFilter, query: PageQuery) {
   return useQuery({
-    queryKey: [...INVENTORY_KEY, 'list', filter],
-    queryFn: () => inventoryApi.list(filter),
-    // Keep the current rows on screen while a changed filter loads.
+    queryKey: [...INVENTORY_KEY, 'page', filter, query],
+    queryFn: () => inventoryApi.page(filter, query),
+    // Keep the current rows on screen while another page or a changed filter loads.
     placeholderData: keepPreviousData,
-    enabled: options?.enabled,
   })
 }
 
 /** Distinct categories across all items, for filter and form suggestions. */
 export function useInventoryCategories() {
   return useQuery({
-    queryKey: [...INVENTORY_KEY, 'list', {}],
-    queryFn: () => inventoryApi.list(),
-    select: (items) =>
-      [...new Set(items.map((item) => item.category).filter((c): c is string => !!c))].sort(),
+    queryKey: [...INVENTORY_KEY, 'categories'],
+    queryFn: inventoryApi.categories,
   })
 }
 

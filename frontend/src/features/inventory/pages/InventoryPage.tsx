@@ -1,5 +1,5 @@
 import { Download, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Badge,
@@ -18,17 +18,17 @@ import type { SortState } from '@/components/ui/DataTable'
 import { errorMessage } from '@/lib/api'
 import { type CsvColumn, datedFilename, downloadCsv } from '@/lib/export-csv'
 import { formatCurrency, formatNumber } from '@/lib/format'
+import { clampPage, toSortParam } from '@/lib/paging'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { toast } from '@/stores/toast'
-import { useDeleteInventoryItem, useInventory, useInventoryCategories } from '../api'
+import {
+  inventoryApi,
+  useDeleteInventoryItem,
+  useInventoryCategories,
+  useInventoryPage,
+} from '../api'
 import { ItemFormModal } from '../components/ItemFormModal'
 import { type InventoryItem, isLowStock } from '../types'
-
-const sorters: Record<string, (a: InventoryItem, b: InventoryItem) => number> = {
-  name: (a, b) => a.name.localeCompare(b.name, 'th'),
-  price: (a, b) => a.price - b.price,
-  quantity: (a, b) => a.quantity - b.quantity,
-}
 
 export function InventoryPage() {
   const { t } = useTranslation()
@@ -42,31 +42,35 @@ export function InventoryPage() {
   /** `'new'` opens an empty form, an item opens it for editing. */
   const [editing, setEditing] = useState<InventoryItem | 'new' | null>(null)
   const [deleting, setDeleting] = useState<InventoryItem | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search.trim())
-  const inventory = useInventory({
+  const filter = {
     search: debouncedSearch || undefined,
     category: category || undefined,
     lowStock: lowStockOnly || undefined,
+  }
+  // Searching, sorting and paging are done by the server: only one page is ever loaded. The
+  // sortable columns are named after the API's sort fields.
+  const [shown, setShown] = useState<{ total?: number }>({})
+  const currentPage = clampPage(page, pageSize, shown.total)
+  const inventory = useInventoryPage(filter, {
+    page: currentPage + 1,
+    pageSize,
+    sort: toSortParam(sort),
   })
+  // Remembered so that a list that became shorter (a filter, a deletion) falls back to its
+  // last page instead of showing an empty one.
+  if (inventory.data && inventory.data.total !== shown.total) {
+    setShown({ total: inventory.data.total })
+  }
+  const rows = inventory.data?.items ?? []
+  const total = inventory.data?.total ?? 0
   const categories = useInventoryCategories()
   const remove = useDeleteInventoryItem()
 
-  const sorted = useMemo(() => {
-    const items = inventory.data ?? []
-    if (!sort) return items
-    const compare = sorters[sort.key]
-    const sign = sort.direction === 'asc' ? 1 : -1
-    return [...items].sort((a, b) => sign * compare(a, b))
-  }, [inventory.data, sort])
-
-  // Filters can shrink the list below the current page; fall back to the last page that exists.
-  const lastPage = Math.max(0, Math.ceil(sorted.length / pageSize) - 1)
-  const currentPage = Math.min(page, lastPage)
-  const rows = sorted.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-
   /** Exports every row matching the current filters and sort, not just the visible page. */
-  function exportCsv() {
+  async function exportCsv() {
     const exportColumns: CsvColumn<InventoryItem>[] = [
       { header: t('inventory.name'), value: (item) => item.name },
       { header: t('inventory.sku'), value: (item) => item.sku },
@@ -81,7 +85,15 @@ export function InventoryPage() {
         value: (item) => (item.isActive ? t('inventory.active') : t('inventory.inactive')),
       },
     ]
-    downloadCsv(datedFilename('inventory'), sorted, exportColumns)
+    setExporting(true)
+    try {
+      const all = await inventoryApi.list(filter, toSortParam(sort))
+      downloadCsv(datedFilename('inventory'), all, exportColumns)
+    } catch {
+      toast.error(t('common.exportFailed'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   function confirmDelete() {
@@ -176,8 +188,13 @@ export function InventoryPage() {
         title={t('nav.inventory')}
         actions={
           <>
-            <Button variant="secondary" disabled={sorted.length === 0} onClick={exportCsv}>
-              <Download className="size-5" />
+            <Button
+              variant="secondary"
+              disabled={total === 0}
+              loading={exporting}
+              onClick={() => void exportCsv()}
+            >
+              {!exporting && <Download className="size-5" />}
               {t('common.exportCsv')}
             </Button>
             <Button onClick={() => setEditing('new')}>
@@ -256,12 +273,15 @@ export function InventoryPage() {
               loading={inventory.isPending}
               empty={t('inventory.empty')}
               sort={sort}
-              onSortChange={setSort}
+              onSortChange={(next) => {
+                setSort(next)
+                setPage(0)
+              }}
             />
             <Pagination
               page={currentPage}
               pageSize={pageSize}
-              total={sorted.length}
+              total={total}
               onPageChange={setPage}
               onPageSizeChange={(size) => {
                 setPageSize(size)

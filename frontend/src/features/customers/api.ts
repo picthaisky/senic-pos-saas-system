@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { fetchAllPages, type Page, type PageQuery } from '@/lib/paging'
 import type {
   CreateCustomer,
   Customer,
@@ -9,7 +10,13 @@ import type {
 } from './types'
 
 export const customersApi = {
-  list: () => api.get<Customer[]>('/customers').then((r) => r.data),
+  /** One page of the active customers matching the search (name, email or phone). */
+  page: (search: string | undefined, query: PageQuery) =>
+    api.get<Page<Customer>>('/customers', { params: { search, ...query } }).then((r) => r.data),
+
+  /** Every active customer, read page by page: for the till's customer picker and exports. */
+  list: (search?: string, sort?: string) =>
+    fetchAllPages((query) => customersApi.page(search, query), sort),
 
   create: (customer: CreateCustomer) =>
     api.post<Customer>('/customers', customer).then((r) => r.data),
@@ -31,7 +38,15 @@ export const customersApi = {
 export const CUSTOMERS_KEY = ['customers'] as const
 
 export function useCustomers() {
-  return useQuery({ queryKey: [...CUSTOMERS_KEY, 'list'], queryFn: customersApi.list })
+  return useQuery({ queryKey: [...CUSTOMERS_KEY, 'list'], queryFn: () => customersApi.list() })
+}
+
+export function useCustomersPage(search: string | undefined, query: PageQuery) {
+  return useQuery({
+    queryKey: [...CUSTOMERS_KEY, 'page', search, query],
+    queryFn: () => customersApi.page(search, query),
+    placeholderData: keepPreviousData,
+  })
 }
 
 export function useLoyaltyHistory(customerId: string) {

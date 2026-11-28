@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Domain.Entities;
 using SenicPosSaaS.Domain.Interfaces;
 using SenicPosSaaS.Infrastructure.Data;
@@ -21,6 +22,41 @@ public class InventoryItemRepository : Repository<InventoryItem>, IInventoryItem
 
     public async Task<IEnumerable<InventoryItem>> SearchAsync(Guid tenantId, string? search, string? category, bool? isActive, bool lowStockOnly, CancellationToken cancellationToken = default)
     {
+        return await Filter(tenantId, search, category, isActive, lowStockOnly).OrderBy(i => i.Name).ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedList<InventoryItem>> SearchPageAsync(Guid tenantId, string? search, string? category, bool? isActive, bool lowStockOnly, SortSpec? sort, int skip, int take, CancellationToken cancellationToken = default)
+    {
+        var query = Filter(tenantId, search, category, isActive, lowStockOnly);
+        var total = await query.CountAsync(cancellationToken);
+
+        var by = sort ?? new SortSpec("name", false);
+        var ordered = by.Field switch
+        {
+            "sku" => query.OrderByDirection(i => i.Sku, by.Descending),
+            "category" => query.OrderByDirection(i => i.Category, by.Descending),
+            "price" => query.OrderByDirection(i => i.Price, by.Descending),
+            "quantity" => query.OrderByDirection(i => i.Quantity, by.Descending),
+            "createdAt" => query.OrderByDirection(i => i.CreatedAt, by.Descending),
+            _ => query.OrderByDirection(i => i.Name, by.Descending),
+        };
+        // The id breaks ties, so a row cannot show up on two pages or on none.
+        var items = await ordered.ThenBy(i => i.Id).Skip(skip).Take(take).ToListAsync(cancellationToken);
+        return new PagedList<InventoryItem>(items, total);
+    }
+
+    public async Task<IReadOnlyList<string>> GetCategoriesAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet
+            .Where(i => i.TenantId == tenantId && i.Category != null && i.Category != "")
+            .Select(i => i.Category!)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToListAsync(cancellationToken);
+    }
+
+    private IQueryable<InventoryItem> Filter(Guid tenantId, string? search, string? category, bool? isActive, bool lowStockOnly)
+    {
         var query = _dbSet.Where(i => i.TenantId == tenantId);
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -42,7 +78,7 @@ public class InventoryItemRepository : Repository<InventoryItem>, IInventoryItem
         if (lowStockOnly)
             query = query.Where(i => i.Quantity <= i.MinimumStock);
 
-        return await query.OrderBy(i => i.Name).ToListAsync(cancellationToken);
+        return query;
     }
 
     public async Task<InventoryItem?> GetByBarcodeAsync(string barcode, Guid tenantId, CancellationToken cancellationToken = default)

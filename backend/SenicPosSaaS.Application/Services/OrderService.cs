@@ -1,3 +1,5 @@
+using SenicPosSaaS.Application.DTOs;
+using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.DTOs.Order;
 using SenicPosSaaS.Application.Interfaces;
@@ -148,6 +150,21 @@ public class OrderService : IOrderService
     {
         var orders = await _orderRepository.SearchAsync(tenantId, fromUtc, toUtc, status, cancellationToken);
         return orders.Select(MapToOrderDto).ToList();
+    }
+
+    public async Task<OrderPageDto> SearchOrdersPageAsync(Guid tenantId, DateTime? fromUtc, DateTime? toUtc, OrderStatus? status, SortSpec? sort, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var request = PageRequest.Normalize(page, pageSize);
+        var result = await _orderRepository.SearchPageAsync(tenantId, fromUtc, toUtc, status, sort, request.Skip, request.PageSize, cancellationToken);
+        return new OrderPageDto
+        {
+            Items = result.Items.Select(MapToOrderDto).ToList(),
+            Total = result.Total,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            CompletedCount = result.CompletedCount,
+            CompletedTotal = result.CompletedTotal
+        };
     }
 
     public Task<bool> CancelOrderAsync(Guid id, CancellationToken cancellationToken = default) =>

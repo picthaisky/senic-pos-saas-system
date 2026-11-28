@@ -17,9 +17,10 @@ import type { Order, OrderStatus } from '@/features/pos/types'
 import { errorMessage } from '@/lib/api'
 import { type CsvColumn, datedFilename, downloadCsv } from '@/lib/export-csv'
 import { formatCurrency, formatDateTime, formatNumber, toIsoDate } from '@/lib/format'
+import { clampPage } from '@/lib/paging'
 import { hasAnyRole, useAuthStore } from '@/stores/auth'
 import { toast } from '@/stores/toast'
-import { useCancelOrder, useOrders } from '../api'
+import { ordersApi, useCancelOrder, useOrdersPage } from '../api'
 import { OrderDetailModal } from '../components/OrderDetailModal'
 import { OrderStatusBadge } from '../components/OrderStatusBadge'
 
@@ -44,22 +45,23 @@ export function OrdersPage() {
   const [pageSize, setPageSize] = useState(10)
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<Order | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   // An emptied or reversed range is not sent: the last good list stays on screen.
   const reversed = from !== '' && to !== '' && from > to
   const validRange = from !== '' && to !== '' && !reversed
-  const orders = useOrders({ from, to, status: status || undefined }, validRange)
+  const filter = { from, to, status: status || undefined }
+  // Paging is done by the server: only one page of bills is ever loaded.
+  const [shown, setShown] = useState<{ total?: number }>({})
+  const currentPage = clampPage(page, pageSize, shown.total)
+  const orders = useOrdersPage(filter, { page: currentPage + 1, pageSize }, validRange)
+  if (orders.data && orders.data.total !== shown.total) setShown({ total: orders.data.total })
   const cancel = useCancelOrder()
 
-  const all = orders.data ?? []
-  const lastPage = Math.max(0, Math.ceil(all.length / pageSize) - 1)
-  const currentPage = Math.min(page, lastPage)
-  const rows = all.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  // Looked up in the fresh list, so the open bill shows its new status after a cancellation.
-  const viewing = all.find((order) => order.id === viewingId)
-
-  const completed = all.filter((order) => order.status === 'Completed')
-  const completedTotal = completed.reduce((sum, order) => sum + order.netAmount, 0)
+  const rows = orders.data?.items ?? []
+  const total = orders.data?.total ?? 0
+  // Looked up in the fresh page, so the open bill shows its new status after a cancellation.
+  const viewing = rows.find((order) => order.id === viewingId)
 
   function confirmCancel() {
     if (!cancelling) return
@@ -76,7 +78,7 @@ export function OrdersPage() {
   }
 
   /** Exports every bill matching the filters, not just the visible page. */
-  function exportCsv() {
+  async function exportCsv() {
     const columns: CsvColumn<Order>[] = [
       { header: t('orders.time'), value: (order) => formatDateTime(order.createdAt) },
       { header: t('pos.orderNumber'), value: (order) => order.orderNumber },
@@ -93,7 +95,14 @@ export function OrdersPage() {
       { header: t('pos.total'), value: (order) => order.netAmount },
       { header: t('orders.status'), value: (order) => t(`orders.statuses.${order.status}`) },
     ]
-    downloadCsv(datedFilename('orders'), all, columns)
+    setExporting(true)
+    try {
+      downloadCsv(datedFilename('orders'), await ordersApi.list(filter), columns)
+    } catch {
+      toast.error(t('common.exportFailed'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   const columns: Column<Order>[] = [
@@ -174,8 +183,13 @@ export function OrdersPage() {
       <PageHeader
         title={t('nav.orders')}
         actions={
-          <Button variant="secondary" disabled={all.length === 0} onClick={exportCsv}>
-            <Download className="size-5" />
+          <Button
+            variant="secondary"
+            disabled={total === 0 || !validRange}
+            loading={exporting}
+            onClick={() => void exportCsv()}
+          >
+            {!exporting && <Download className="size-5" />}
             {t('common.exportCsv')}
           </Button>
         }
@@ -235,9 +249,9 @@ export function OrdersPage() {
             {orders.data && (
               <p className="mb-3 text-sm text-muted">
                 {t('orders.summary', {
-                  count: completed.length,
-                  bills: formatNumber(completed.length),
-                  total: formatCurrency(completedTotal),
+                  count: orders.data.completedCount,
+                  bills: formatNumber(orders.data.completedCount),
+                  total: formatCurrency(orders.data.completedTotal),
                 })}
               </p>
             )}
@@ -252,7 +266,7 @@ export function OrdersPage() {
             <Pagination
               page={currentPage}
               pageSize={pageSize}
-              total={all.length}
+              total={total}
               onPageChange={setPage}
               onPageSizeChange={(size) => {
                 setPageSize(size)

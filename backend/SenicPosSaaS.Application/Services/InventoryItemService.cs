@@ -1,5 +1,7 @@
 using SenicPosSaaS.Application.Common;
+using SenicPosSaaS.Application.DTOs;
 using SenicPosSaaS.Application.DTOs.InventoryItem;
+using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Application.Interfaces;
 using SenicPosSaaS.Domain.Entities;
 using SenicPosSaaS.Domain.Interfaces;
@@ -72,6 +74,22 @@ public class InventoryItemService : IInventoryItemService
         var items = await _repository.SearchAsync(tenantId, search, category, isActive, lowStockOnly, cancellationToken);
         return items.Select(MapToDto);
     }
+
+    public async Task<PageDto<InventoryItemDto>> SearchInventoryItemsPageAsync(Guid tenantId, string? search, string? category, bool? isActive, bool lowStockOnly, SortSpec? sort, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var request = PageRequest.Normalize(page, pageSize);
+        var result = await _repository.SearchPageAsync(tenantId, search, category, isActive, lowStockOnly, sort, request.Skip, request.PageSize, cancellationToken);
+        return new PageDto<InventoryItemDto>
+        {
+            Items = result.Items.Select(MapToDto).ToList(),
+            Total = result.Total,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
+    public Task<IReadOnlyList<string>> GetCategoriesAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        _repository.GetCategoriesAsync(tenantId, cancellationToken);
 
     public async Task<InventoryItemDto?> GetInventoryItemByBarcodeAsync(Guid tenantId, string barcode, CancellationToken cancellationToken = default)
     {

@@ -104,10 +104,13 @@ if (!credentials) {
   check('refresh issues a new token', refresh.status === 200 && !!refresh.json?.accessToken, `status ${refresh.status}`)
   token = refresh.json?.accessToken ?? token
 
-  const inventory = await call('GET', '/api/inventory')
-  check('inventory list', inventory.status === 200 && Array.isArray(inventory.json), `status ${inventory.status}`)
-  const customers = await call('GET', '/api/customers')
-  check('customer list', customers.status === 200 && Array.isArray(customers.json), `status ${customers.status}`)
+  const isPage = (json) => Array.isArray(json?.items) && Number.isInteger(json.total) && json.page === 1
+  const inventory = await call('GET', '/api/inventory?page=1&pageSize=5')
+  check('inventory list, one page', inventory.status === 200 && isPage(inventory.json) && inventory.json.items.length <= 5, `status ${inventory.status}`)
+  const customers = await call('GET', '/api/customers?page=1')
+  check('customer list, one page', customers.status === 200 && isPage(customers.json), `status ${customers.status}`)
+  const legacy = await call('GET', '/api/inventory')
+  check('the unpaged list still answers older clients', legacy.status === 200 && Array.isArray(legacy.json), `status ${legacy.status}`)
   const dashboard = await call('GET', '/api/dashboard/summary')
   check(
     'dashboard summary (also proves time zone data is present)',
@@ -140,8 +143,10 @@ if (!credentials) {
     const duplicate = await call('POST', '/api/inventory', { sku, name: 'dup', price: 1, cost: 1, quantity: 1, minimumStock: 0 })
     check('duplicate SKU is a 409', duplicate.status === 409, `status ${duplicate.status}`)
 
-    const search = await call('GET', `/api/inventory?search=${encodeURIComponent('น้ำดื่ม SMOKE')}`)
-    check('case-insensitive search', search.status === 200 && search.json?.some((i) => i.sku === sku))
+    const search = await call('GET', `/api/inventory?page=1&sort=-createdAt&search=${encodeURIComponent('น้ำดื่ม SMOKE')}`)
+    check('case-insensitive search, newest first', search.status === 200 && search.json?.items?.[0]?.sku === sku, `status ${search.status}`)
+    const badSort = await call('GET', '/api/inventory?page=1&sort=nonsense')
+    check('an unknown sort field is a 400', badSort.status === 400, `status ${badSort.status}`)
 
     const byBarcode = await call('GET', `/api/inventory/barcode/${sku}`)
     check('barcode lookup', byBarcode.status === 200)
@@ -185,8 +190,12 @@ if (!credentials) {
     const history = await call('GET', `/api/customers/${customer.json?.id}/loyalty`)
     check('loyalty earn, redeem and history', redeem.json?.loyaltyPoints === 30 && history.json?.length === 2, `points ${redeem.json?.loyaltyPoints}`)
 
-    const orders = await call('GET', '/api/orders?status=Completed')
-    check('order list shows the customer name', orders.status === 200 && orders.json?.some((o) => o.customerName === 'มาลี'))
+    const orders = await call('GET', '/api/orders?status=Completed&page=1&pageSize=200')
+    check(
+      'order list shows the customer name and sums the completed sales',
+      orders.status === 200 && orders.json?.items?.some((o) => o.customerName === 'มาลี') && orders.json.completedCount === orders.json.total && orders.json.completedTotal > 0,
+      `status ${orders.status}`,
+    )
 
     const cancel = await call('POST', `/api/orders/${walkIn.json?.id}/cancel`)
     const afterCancel = await call('GET', `/api/inventory/${item.json?.id}`)

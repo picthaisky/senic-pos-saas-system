@@ -1,3 +1,5 @@
+using SenicPosSaaS.Application.DTOs;
+using SenicPosSaaS.Domain.Common;
 using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.DTOs.Customer;
 using SenicPosSaaS.Application.Interfaces;
@@ -60,6 +62,19 @@ public class CustomerService : ICustomerService
     {
         var customers = await _repository.SearchAsync(tenantId, search, cancellationToken);
         return customers.Select(MapToDto);
+    }
+
+    public async Task<PageDto<CustomerDto>> SearchCustomersPageAsync(Guid tenantId, string? search, SortSpec? sort, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var request = PageRequest.Normalize(page, pageSize);
+        var result = await _repository.SearchPageAsync(tenantId, search, sort, request.Skip, request.PageSize, cancellationToken);
+        return new PageDto<CustomerDto>
+        {
+            Items = result.Items.Select(MapToDto).ToList(),
+            Total = result.Total,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
     }
 
     public async Task<CustomerDto?> UpdateCustomerAsync(Guid id, UpdateCustomerDto dto, CancellationToken cancellationToken = default)

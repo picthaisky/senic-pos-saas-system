@@ -16,7 +16,8 @@
     "noData": "No data",
     "error": "Something went wrong. Please try again.",
     "loadFailed": "Could not load the data",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "exportFailed": "The export failed. Please try again."
   },
   "validation": {
     "required": "This field is required",
@@ -152,7 +153,9 @@
     "editNamed": "Edit {{name}}",
     "address": "Address",
     "saved": "Customer saved",
-    "emailTaken": "Another customer already uses this email"
+    "emailTaken": "Another customer already uses this email",
+    "searchPlaceholder": "Name, email or phone",
+    "noMatch": "No customer matches the search"
   },
   "users": {
     "list": "Users",
