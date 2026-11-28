@@ -47,6 +47,7 @@ public class OrderService : IOrderService
         ConcurrencyRetry.RunAsync(
             () => CreateOrderOnceAsync(dto, cancellationToken),
             _orderRepository.DiscardChanges,
+            ErrorCodes.SaleBusy,
             "The sale could not be recorded because the items are being sold elsewhere. Please try again.");
 
     private async Task<OrderDto> CreateOrderOnceAsync(CreateOrderDto dto, CancellationToken cancellationToken)
@@ -64,11 +65,11 @@ public class OrderService : IOrderService
         {
             customer = await _customerRepository.GetByIdAsync(dto.CustomerId.Value, cancellationToken);
             if (customer == null || customer.TenantId != dto.TenantId)
-                throw new NotFoundException("Customer not found");
+                throw new NotFoundException(ErrorCodes.CustomerNotFound, "Customer not found");
         }
 
         if (dto.DiscountAmount < 0)
-            throw new InvalidRequestException("The bill discount cannot be negative.");
+            throw new InvalidRequestException(ErrorCodes.BillDiscountNegative, "The bill discount cannot be negative.");
 
         // Read once per sale and written onto the bill, so a later change of the settings does not
         // alter what this bill says.
@@ -77,17 +78,17 @@ public class OrderService : IOrderService
         // Points used on the bill are a discount like any other, so they come off before tax.
         decimal pointsDiscount = 0;
         if (dto.PointsRedeemed < 0)
-            throw new InvalidRequestException("The points to use cannot be negative.");
+            throw new InvalidRequestException(ErrorCodes.PointsNegative, "The points to use cannot be negative.");
         if (dto.PointsRedeemed > 0)
         {
             if (customer == null)
-                throw new InvalidRequestException("Points can only be used on a bill with a customer.");
+                throw new InvalidRequestException(ErrorCodes.PointsNeedCustomer, "Points can only be used on a bill with a customer.");
             if (settings.PointValueBaht <= 0)
-                throw new InvalidRequestException("This shop does not take points as a discount.");
+                throw new InvalidRequestException(ErrorCodes.PointsNotAccepted, "This shop does not take points as a discount.");
             // Checked against the balance read in this attempt; a parallel bill spending the same
             // points fails the save and this runs again from the new balance.
             if (dto.PointsRedeemed > customer.LoyaltyPoints)
-                throw new ConflictException($"Not enough points: the balance is {customer.LoyaltyPoints}.");
+                throw new ConflictException(ErrorCodes.NotEnoughPoints, $"Not enough points: the balance is {customer.LoyaltyPoints}.", ("balance", customer.LoyaltyPoints));
             pointsDiscount = OrderPricing.Round(dto.PointsRedeemed * settings.PointValueBaht);
         }
 
@@ -126,13 +127,13 @@ public class OrderService : IOrderService
         {
             var inventoryItem = await _inventoryRepository.GetByIdAsync(itemDto.InventoryItemId, cancellationToken);
             if (inventoryItem == null || inventoryItem.TenantId != dto.TenantId)
-                throw new NotFoundException($"Inventory item {itemDto.InventoryItemId} not found");
+                throw new NotFoundException(ErrorCodes.ItemNotFound, $"Inventory item {itemDto.InventoryItemId} not found");
 
             if (inventoryItem.Quantity < itemDto.Quantity)
-                throw new ConflictException($"Insufficient stock for {inventoryItem.Name} ({inventoryItem.Quantity} left)");
+                throw new ConflictException(ErrorCodes.InsufficientStock, $"Insufficient stock for {inventoryItem.Name} ({inventoryItem.Quantity} left)", ("name", inventoryItem.Name), ("available", inventoryItem.Quantity));
 
             if (itemDto.Discount < 0 || itemDto.Discount > inventoryItem.Price * itemDto.Quantity)
-                throw new InvalidRequestException($"The discount on {inventoryItem.Name} must be between 0 and the amount of the line.");
+                throw new InvalidRequestException(ErrorCodes.LineDiscountInvalid, $"The discount on {inventoryItem.Name} must be between 0 and the amount of the line.", ("name", inventoryItem.Name));
 
             var subtotal = OrderPricing.LineSubtotal(inventoryItem.Price, itemDto.Quantity, itemDto.Discount);
             totalAmount += subtotal;
@@ -162,10 +163,10 @@ public class OrderService : IOrderService
         }
 
         if (order.DiscountAmount > totalAmount)
-            throw new InvalidRequestException("The bill discount cannot be more than the total of the items.");
+            throw new InvalidRequestException(ErrorCodes.BillDiscountTooLarge, "The bill discount cannot be more than the total of the items.");
         // A bill paid entirely with points would be goods given away, which is taxed differently.
         if (pointsDiscount > 0 && pointsDiscount >= totalAmount - order.DiscountAmount)
-            throw new InvalidRequestException("The points must leave something to pay. Use fewer points.");
+            throw new InvalidRequestException(ErrorCodes.PointsLeaveNothing, "The points must leave something to pay. Use fewer points.");
 
         // Discounts come off before tax, and the tax is worked out once for the whole bill.
         var amounts = OrderPricing.Calculate(totalAmount, order.DiscountAmount + pointsDiscount, settings.VatMode, settings.VatRatePercent);
@@ -241,6 +242,7 @@ public class OrderService : IOrderService
         ConcurrencyRetry.RunAsync(
             () => CancelOrderOnceAsync(id, cancellationToken),
             _orderRepository.DiscardChanges,
+            ErrorCodes.CancelBusy,
             "The order could not be cancelled because its items are being sold right now. Please try again.");
 
     private async Task<bool> CancelOrderOnceAsync(Guid id, CancellationToken cancellationToken)

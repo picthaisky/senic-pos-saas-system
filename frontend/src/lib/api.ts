@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios'
+import i18n from '@/i18n'
 import { env } from '@/lib/env'
 import { type AuthSession, useAuthStore } from '@/stores/auth'
 
@@ -85,8 +86,13 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
 export interface ProblemDetails {
   title?: string
   status?: number
+  /** English, for logs and for clients that do not know `code`. */
   detail?: string
   errors?: Record<string, string[]>
+  /** The stable name of the error (backend ErrorCodes); translated in the "errors" section of the locale files. */
+  code?: string
+  /** The values the sentence for `code` needs, e.g. the name of the item that ran out. */
+  params?: Record<string, string | number | null>
 }
 
 export function getProblem(error: unknown): ProblemDetails | undefined {
@@ -95,10 +101,19 @@ export function getProblem(error: unknown): ProblemDetails | undefined {
   return data && typeof data === 'object' ? (data as ProblemDetails) : undefined
 }
 
-/** The server's explanation when it sent one (e.g. "Insufficient stock"), otherwise `fallback`. */
+/**
+ * What to tell the user about a failed request, in their language: the sentence for the
+ * server's error code when it sent one we know, otherwise `fallback`. The server's own
+ * explanation is English, so it is shown only to someone reading English.
+ */
 export function errorMessage(error: unknown, fallback: string): string {
   const problem = getProblem(error)
-  return problem?.detail || problem?.title || fallback
+  if (problem?.code) {
+    const key = `errors.${problem.code}`
+    // The key comes from the server, so it is outside the keys the compiler knows.
+    if (i18n.exists(key)) return String(i18n.t(key as never, (problem.params ?? {}) as never))
+  }
+  return (i18n.language === 'en' && (problem?.detail || problem?.title)) || fallback
 }
 
 export function getStatus(error: unknown): number | undefined {

@@ -27,9 +27,9 @@ public class InventoryItemService : IInventoryItemService
         var clash = clashes?.FirstOrDefault();
         if (clash != null)
         {
-            throw new ConflictException(clash.Sku == dto.Sku
-                ? $"SKU {dto.Sku} already exists."
-                : $"Barcode {barcode} is already used by {clash.Name}.");
+            throw clash.Sku == dto.Sku
+                ? new ConflictException(ErrorCodes.SkuTaken, $"SKU {dto.Sku} already exists.", ("sku", dto.Sku))
+                : new ConflictException(ErrorCodes.BarcodeTaken, $"Barcode {barcode} is already used by {clash.Name}.", ("barcode", barcode), ("name", clash.Name));
         }
         dto.Barcode = barcode;
 

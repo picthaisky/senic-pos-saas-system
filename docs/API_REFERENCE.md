@@ -8,20 +8,41 @@ Backend ทำตาม contract นี้ครบแล้ว และมี 
 
 ## 1. ข้อตกลงร่วม
 
-| เรื่อง           | ข้อตกลง                                                                                                    | สถานะ backend |
-| -------------- | --------------------------------------------------------------------------------------------------------- | ------------- |
-| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                   | ✅            |
-| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                              | ✅            |
-| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                  | ✅            |
-| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                   | ✅            |
-| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                 | ✅            |
-| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health` | ✅            |
-| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`)                                         | ✅            |
-| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                     | ✅            |
+| เรื่อง           | ข้อตกลง                                                                                                            | สถานะ backend |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | ------------- |
+| Base path      | ทุก endpoint อยู่ใต้ `/api`                                                                                           | ✅            |
+| รูปแบบข้อมูล      | JSON, ชื่อ field เป็น camelCase                                                                                      | ✅            |
+| Enum           | ส่งเป็น string เช่น `"Cash"`, `"Completed"`                                                                          | ✅            |
+| วันที่            | ISO 8601 UTC เช่น `2026-11-27T08:30:00Z`                                                                           | ✅            |
+| Tenant         | อ่านจาก claim `tenantId` ใน JWT เท่านั้น ไม่รับจาก URL หรือ body                                                         | ✅            |
+| Authentication | `Authorization: Bearer <accessToken>` ทุก endpoint ยกเว้น `/api/auth/login`, `/api/auth/refresh`, `/health`         | ✅            |
+| Error          | RFC 7807 `ProblemDetails` (`title`, `status`, `detail`, `errors`) พร้อม `code` และ `params` (ดูหัวข้อ "รหัสของ error") | ✅            |
+| CORS           | อนุญาตเฉพาะ origin ของ frontend และ `AllowCredentials`                                                             | ✅            |
 
 Status code ที่ frontend จัดการ: `400` (validation, แสดงใต้ field จาก `errors`), `401` (ลอง refresh 1 ครั้ง
 ถ้าไม่ผ่านให้กลับหน้า login), `403` (ไม่มีสิทธิ์), `404`, `409` (เช่น stock ไม่พอ, SKU ซ้ำ),
 `429` (login ถี่หรือผิดหลายครั้งเกินไป มี header `Retry-After` เป็นวินาที)
+
+### รหัสของ error ✅
+
+Error ที่ผู้ใช้ต้องอ่านมี `code` ซึ่งเป็นชื่อคงที่ของ error และ `params` ซึ่งเป็นค่าที่ประโยคต้องใช้ ส่วน `detail` ยังเป็นประโยคภาษาอังกฤษเหมือนเดิม
+
+```jsonc
+// 409 จาก POST /api/orders
+{
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Insufficient stock for น้ำดื่ม (3 left)",
+  "code": "insufficient_stock",
+  "params": { "name": "น้ำดื่ม", "available": 3 },
+}
+```
+
+- รายการรหัสทั้งหมดอยู่ที่ `backend/SenicPosSaaS.Application/Common/ErrorCodes.cs` พร้อมชื่อของ `params` ของแต่ละรหัส
+- Frontend แปลรหัสเป็นประโยคตามภาษาของผู้ใช้จากหัวข้อ `errors` ใน `frontend/src/i18n/locales/th.json` และ `en.json`
+- รหัสเป็นสัญญา ห้ามเปลี่ยนชื่อหรือนำกลับมาใช้กับความหมายอื่น รหัสใหม่ต้องมีประโยคในทุกภาษา (test `error-codes.test.ts` ของ frontend อ่านไฟล์ของ backend แล้วล้มเมื่อขาด)
+- เมื่อไม่มี `code` หรือเป็นรหัสที่ frontend ไม่รู้จัก ผู้ใช้ภาษาไทยเห็นข้อความทั่วไปของหน้าจอนั้น ส่วนผู้ใช้ภาษาอังกฤษเห็น `detail`
+- ยังไม่มีรหัส: error ของการตรวจรูปแบบข้อมูล (`400` ที่มี `errors` รายช่อง) ซึ่งหน้าจอตรวจเองก่อนส่ง และ `401`, `403` ที่หน้าจอจัดการจาก status
 
 ### การแบ่งหน้า (paging) ✅
 

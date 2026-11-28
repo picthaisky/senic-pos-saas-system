@@ -155,7 +155,7 @@ describe('order queue', () => {
 
     const [failed] = useOrderQueue.getState().orders
     expect(failed.status).toBe('failed')
-    expect(failed.error).toContain('Insufficient stock')
+    expect(failed.error).toContain('มีไม่พอ')
 
     // A later automatic sync leaves it alone ...
     expect(await syncQueue()).toEqual({ sent: 0, failed: 0 })

@@ -51,6 +51,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
+      // Tests only: one test reads the server's list of error codes from ../backend.
+      fs: mode === 'test' ? { allow: ['..'] } : undefined,
       proxy: {
         '/api': { target: proxyTarget, changeOrigin: true },
         '/hubs': { target: proxyTarget, changeOrigin: true, ws: true },

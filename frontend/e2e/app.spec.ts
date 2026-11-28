@@ -378,6 +378,25 @@ test('opens the sales report and downloads it as a spreadsheet', async ({ page }
   expect(file.length).toBeGreaterThan(2000)
 })
 
+test('explains a refusal of the server in Thai', async ({ page }) => {
+  await signIn(page)
+  const item = await addItem(page, { price: '10', quantity: '1' })
+  const sku = `E2E-${item.barcode.slice(2)}`
+
+  // The same SKU again: the server refuses, and names the error for the app to translate.
+  await page.getByRole('button', { name: 'เพิ่มสินค้า' }).click()
+  const dialog = page.getByRole('dialog', { name: 'เพิ่มสินค้า' })
+  await dialog.getByLabel('ชื่อสินค้า').fill('สินค้าซ้ำ')
+  await dialog.getByLabel('SKU').fill(sku)
+  await dialog.getByLabel('ราคาขาย').fill('10')
+  await dialog.getByLabel('ต้นทุน').fill('1')
+  await dialog.getByLabel('คงเหลือ').fill('1')
+  await dialog.getByLabel('จุดสั่งซื้อ').fill('0')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText(`มี SKU ${sku} อยู่แล้ว`)).toBeVisible()
+  await shot(page, '17-error-thai')
+})
+
 test('updates another open window when a sale happens', async ({ page, context }) => {
   await signIn(page)
   const item = await addItem(page, { price: '100', quantity: '6', minimumStock: '5' })

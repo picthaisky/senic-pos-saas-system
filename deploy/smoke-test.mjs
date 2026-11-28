@@ -195,7 +195,7 @@ if (!credentials) {
     check('walk-in sale', walkIn.status === 201, `status ${walkIn.status}`)
 
     const tooMany = await call('POST', '/api/orders', { paymentMethod: 'Cash', items: [{ inventoryItemId: item.json?.id, quantity: 99 }] })
-    check('insufficient stock is a 409', tooMany.status === 409, `status ${tooMany.status}`)
+    check('insufficient stock is a 409 that names the error for the app to translate', tooMany.status === 409 && tooMany.json?.code === 'insufficient_stock' && tooMany.json?.params?.available === 2, `status ${tooMany.status}, code ${tooMany.json?.code}`)
 
     const afterSales = await call('GET', `/api/inventory/${item.json?.id}`)
     check('stock deducted once per sale (6 - 3 - 1)', afterSales.json?.quantity === 2, `quantity ${afterSales.json?.quantity}`)

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.Application.DTOs.Dashboard;
 using SenicPosSaaS.Application.Interfaces;
 
@@ -36,9 +37,9 @@ public class DashboardController : TenantControllerBase
         var start = from ?? end.AddDays(-6);
 
         if (start > end)
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request", detail: "'from' must not be after 'to'.");
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.PeriodReversed, "'from' must not be after 'to'.");
         if (end.DayNumber - start.DayNumber >= MaxRangeDays)
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request", detail: $"The range may cover at most {MaxRangeDays} days.");
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.PeriodTooLong, $"The range may cover at most {MaxRangeDays} days.", ("days", (object?)MaxRangeDays));
 
         var summary = await _dashboardService.GetSummaryAsync(TenantId, start, end, _businessTimeZone, cancellationToken);
         return Ok(summary);

@@ -276,7 +276,9 @@ function changePoints(
   const customer = customers.find((candidate) => candidate.id === customerId)
   if (!customer) return notFound
   if (type === 'Redeemed' && body.points > customer.loyaltyPoints) {
-    return { status: 409, data: { title: 'Conflict', status: 409, detail: 'Not enough points' } }
+    return problem(409, 'not_enough_points', 'Not enough points', {
+      balance: customer.loyaltyPoints,
+    })
   }
   customer.loyaltyPoints += type === 'Earned' ? body.points : -body.points
   loyalty.push({
@@ -495,9 +497,15 @@ const auditLog: AuditEntry[] = [
   },
 ]
 
-const conflict = (detail: string): MockResult => ({
-  status: 409,
-  data: { title: 'Conflict', status: 409, detail },
+/** A refusal like the API's: the stable code the app translates, and the English detail. */
+const problem = (
+  status: 400 | 409,
+  code: string,
+  detail: string,
+  params?: Record<string, string | number>,
+): MockResult => ({
+  status,
+  data: { title: status === 409 ? 'Conflict' : 'Bad Request', status, detail, code, params },
 })
 
 export const dataRoutes: MockRoute[] = [
@@ -525,7 +533,9 @@ export const dataRoutes: MockRoute[] = [
       const input = body as CreateUser
       const email = input.email.trim().toLowerCase()
       if (users.some((user) => user.email === email)) {
-        return conflict(`A user with email ${email} already exists.`)
+        return problem(409, 'user_email_taken', `A user with email ${email} already exists.`, {
+          email,
+        })
       }
       const user: ManagedUser = {
         id: crypto.randomUUID(),
@@ -552,7 +562,7 @@ export const dataRoutes: MockRoute[] = [
         user.role === 'Owner' && user.isActive && (role !== 'Owner' || !isActive)
       const otherOwner = users.some((u) => u.id !== user.id && u.role === 'Owner' && u.isActive)
       if (losesOwnership && !otherOwner) {
-        return conflict('The shop must keep at least one active owner.')
+        return problem(409, 'last_owner', 'The shop must keep at least one active owner.')
       }
       Object.assign(user, { name: changes.name?.trim() ?? user.name, role, isActive })
       return { status: 200, data: { ...user } }
@@ -616,10 +626,7 @@ export const dataRoutes: MockRoute[] = [
     ({ body }) => {
       const input = body as CreateInventoryItem
       if (items.some((item) => item.sku === input.sku)) {
-        return {
-          status: 409,
-          data: { title: 'Conflict', status: 409, detail: `SKU ${input.sku} already exists` },
-        }
+        return problem(409, 'sku_taken', `SKU ${input.sku} already exists`, { sku: input.sku })
       }
       const item: InventoryItem = {
         ...input,
@@ -701,14 +708,12 @@ export const dataRoutes: MockRoute[] = [
       >
       const email = changes.email?.trim().toLowerCase()
       if (email && customers.some((other) => other !== customer && other.email === email)) {
-        return {
-          status: 409,
-          data: {
-            title: 'Conflict',
-            status: 409,
-            detail: `A customer with email ${email} already exists.`,
-          },
-        }
+        return problem(
+          409,
+          'customer_email_taken',
+          `A customer with email ${email} already exists.`,
+          { email },
+        )
       }
       if (changes.firstName !== undefined) customer.firstName = changes.firstName.trim()
       if (changes.lastName !== undefined) customer.lastName = changes.lastName.trim()
@@ -765,14 +770,12 @@ export const dataRoutes: MockRoute[] = [
         const item = items.find((candidate) => candidate.id === line.inventoryItemId)
         if (!item) return notFound
         if (line.quantity > item.quantity) {
-          return {
-            status: 409,
-            data: {
-              title: 'Conflict',
-              status: 409,
-              detail: `Insufficient stock for ${item.name} (${item.quantity} left)`,
-            },
-          }
+          return problem(
+            409,
+            'insufficient_stock',
+            `Insufficient stock for ${item.name} (${item.quantity} left)`,
+            { name: item.name, available: item.quantity },
+          )
         }
       }
 
@@ -782,33 +785,18 @@ export const dataRoutes: MockRoute[] = [
       if (asked > 0) {
         const customer = customers.find((candidate) => candidate.id === request.customerId)
         if (!customer || mockShopSettings.current.pointValueBaht <= 0) {
-          return {
-            status: 400,
-            data: {
-              title: 'Bad Request',
-              status: 400,
-              detail: 'Points cannot be used on this bill.',
-            },
-          }
+          return problem(400, 'points_not_accepted', 'Points cannot be used on this bill.')
         }
         if (asked > customer.loyaltyPoints) {
-          return {
-            status: 409,
-            data: { title: 'Conflict', status: 409, detail: 'Not enough points' },
-          }
+          return problem(409, 'not_enough_points', 'Not enough points', {
+            balance: customer.loyaltyPoints,
+          })
         }
       }
 
       const order = buildOrder(request, new Date())
       if (asked > 0 && order.totalAmount - order.discountAmount - order.pointsDiscount <= 0) {
-        return {
-          status: 400,
-          data: {
-            title: 'Bad Request',
-            status: 400,
-            detail: 'The points must leave something to pay.',
-          },
-        }
+        return problem(400, 'points_leave_nothing', 'The points must leave something to pay.')
       }
       movePoints(order, 'Redeemed')
       movePoints(order, 'Earned')

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SenicPosSaaS.API.Auth;
+using SenicPosSaaS.Application.Common;
 using SenicPosSaaS.API.Push;
 using SenicPosSaaS.Application.DTOs.Push;
 using SenicPosSaaS.Application.Interfaces;
@@ -35,7 +36,7 @@ public class PushController : TenantControllerBase
     public ActionResult<PushPublicKeyDto> GetPublicKey()
     {
         if (!_sender.IsConfigured)
-            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found", detail: "Push notifications are not configured.");
+            return this.CodedProblem(StatusCodes.Status404NotFound, ErrorCodes.PushNotConfigured, "Push notifications are not configured.");
 
         return Ok(new PushPublicKeyDto { PublicKey = _sender.PublicKey! });
     }
@@ -47,10 +48,10 @@ public class PushController : TenantControllerBase
     public async Task<IActionResult> Subscribe([FromBody] PushSubscribeRequestDto request, CancellationToken cancellationToken)
     {
         if (!_sender.IsConfigured)
-            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found", detail: "Push notifications are not configured.");
+            return this.CodedProblem(StatusCodes.Status404NotFound, ErrorCodes.PushNotConfigured, "Push notifications are not configured.");
 
         if (!_options.IsAllowedEndpoint(request.Endpoint))
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request", detail: "The endpoint is not a known browser push service.");
+            return this.CodedProblem(StatusCodes.Status400BadRequest, ErrorCodes.PushEndpointUnknown, "The endpoint is not a known browser push service.");
 
         await _subscriptions.SubscribeAsync(TenantId, UserId, request, cancellationToken);
         return NoContent();
